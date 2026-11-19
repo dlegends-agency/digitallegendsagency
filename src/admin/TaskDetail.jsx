@@ -135,16 +135,16 @@ export default function TaskDetail({ task, projects, team, me, isSuper, onClose,
       <motion.aside role="dialog" aria-modal="true" aria-label="Task details"
         initial={{ x: '100%' }} animate={{ x: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 40 }}
         className="h-full w-full max-w-5xl overflow-y-auto border-l border-white/12 bg-[#0a0b22]">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0a0b22]/95 px-6 py-4 backdrop-blur">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0a0b22]/95 px-4 py-3 backdrop-blur md:px-6 md:py-4">
           <p className="flex min-w-0 items-center gap-2 text-sm text-snow/55"><Icon name="folder" className="h-4 w-4 shrink-0" /><span className="truncate">{project?.name || 'Quick task'}</span></p>
           <button onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-snow/60 hover:bg-white/10 hover:text-snow"><Icon name="x" /></button>
         </header>
 
-        <div className="grid gap-8 p-6 md:p-8 lg:grid-cols-[1.7fr_1fr]">
+        <div className="grid gap-8 p-4 sm:p-6 md:p-8 lg:grid-cols-[1.7fr_1fr]">
           <div className="min-w-0">
             <input defaultValue={t.title} maxLength={300} aria-label="Task title"
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== t.title) save({ title: v }); else e.target.value = t.title }}
-              className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-3xl font-bold tracking-[-0.03em] outline-none hover:border-white/10 focus:border-white/30" />
+              className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-2xl font-bold md:text-3xl tracking-[-0.03em] outline-none hover:border-white/10 focus:border-white/30" />
 
             <label className={`${lbl} mt-6`}>Description
               <textarea defaultValue={t.description || ''} rows={5} maxLength={5000} placeholder="Add more detail about this task"
@@ -166,7 +166,7 @@ export default function TaskDetail({ task, projects, team, me, isSuper, onClose,
                     <input type="checkbox" checked={i.done} onChange={() => toggleItem(i)} aria-label={`Mark ${i.text} done`} className="h-4 w-4 shrink-0 accent-pink" />
                     <input defaultValue={i.text} maxLength={300} aria-label="Checklist item" onBlur={(e) => editItem(i, e.target.value)}
                       className={`min-w-0 flex-1 bg-transparent py-1 outline-none ${i.done ? 'text-snow/45 line-through' : ''}`} />
-                    <button onClick={() => removeItem(i)} aria-label="Delete item" className="text-snow/30 opacity-0 hover:text-pink focus:opacity-100 group-hover:opacity-100"><Icon name="trash" className="h-4 w-4" /></button>
+                    <button onClick={() => removeItem(i)} aria-label="Delete item" className="text-snow/30 hover:text-pink focus:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"><Icon name="trash" className="h-4 w-4" /></button>
                   </li>
                 ))}
               </ul>

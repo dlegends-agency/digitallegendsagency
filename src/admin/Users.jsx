@@ -46,7 +46,7 @@ export default function Users({ me }) {
         <div className="flex flex-wrap gap-2 text-sm">
           {['super_admin', 'admin', 'none'].map((r) => <span key={r} className={`rounded-full px-3 py-1.5 font-semibold ${roleStyle[r]}`}>{roleLabel[r]} {counts[r] || 0}</span>)}
         </div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search users" className={`${field} max-w-xs py-2.5 text-sm`} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search users" className={`${field} w-full py-2.5 text-sm sm:max-w-xs`} />
       </div>
 
       {users === null && !error && <p className="text-snow/55">Loading...</p>}

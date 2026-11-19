@@ -25,13 +25,13 @@ export function Nav({ home = true }) {
   const href = (h) => (h.startsWith('/') ? h : `${base}${h}`)
   return (
     <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 md:px-6">
-      <div className="glass mx-auto flex max-w-[1440px] items-center justify-between rounded-full bg-ink/70 py-2.5 pl-6 pr-2.5 backdrop-blur-xl">
-        <a href={`${base}#top`} aria-label="Digital Legends Agency home"><img src="/img/logo.webp" alt="Digital Legends Agency" className="h-9 w-auto md:h-11" /></a>
+      <div className="glass mx-auto flex max-w-[1440px] items-center justify-between rounded-full bg-ink/70 py-2.5 pl-4 pr-2.5 backdrop-blur-xl md:pl-6">
+        <a href={`${base}#top`} aria-label="Digital Legends Agency home" className="shrink-0"><img src="/img/logo.webp" alt="Digital Legends Agency" className="h-8 w-auto sm:h-9 md:h-11" /></a>
         <nav className="hidden items-center gap-9 md:flex" aria-label="Main">
           {nav.map(([l, h]) => <a key={l} href={href(h)} className="text-[15px] text-snow/70 transition-colors hover:text-snow">{l}</a>)}
         </nav>
-        <div className="flex items-center gap-2">
-          <a href={`${base}#contact`} className="pill-white rounded-full px-5 py-2.5 text-[14px] font-semibold">Start a project</a>
+        <div className="flex shrink-0 items-center gap-2">
+          <a href={`${base}#contact`} className="pill-white whitespace-nowrap rounded-full px-3.5 py-2.5 text-[13px] font-semibold max-[349px]:hidden sm:px-5 sm:text-[14px]">Start a project</a>
           <button aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)} className="glass grid h-10 w-10 place-items-center rounded-full md:hidden">
             <span className="grid gap-1"><span className="block h-0.5 w-4 bg-snow" /><span className="block h-0.5 w-4 bg-snow" /></span>
           </button>
@@ -40,6 +40,7 @@ export function Nav({ home = true }) {
       {open && (
         <div className="glass mx-auto mt-2 max-w-[1440px] rounded-3xl bg-ink/90 p-4 backdrop-blur-xl md:hidden">
           {nav.map(([l, h]) => <a key={l} href={href(h)} onClick={() => setOpen(false)} className="block rounded-xl px-4 py-3 text-lg">{l}</a>)}
+          <a href={`${base}#contact`} onClick={() => setOpen(false)} className="pill-white mt-2 block rounded-full px-4 py-3 text-center text-base font-semibold min-[350px]:hidden">Start a project</a>
         </div>
       )}
     </header>

@@ -57,8 +57,8 @@ export default function Log() {
           ))}
         </div>
         <div className="flex flex-wrap gap-3">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the log" aria-label="Search the log" className={`${field} max-w-sm py-2.5 text-sm`} />
-          <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Filter by person" className={`${field} max-w-xs py-2.5 text-sm`}>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the log" aria-label="Search the log" className={`${field} w-full py-2.5 text-sm sm:max-w-sm`} />
+          <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Filter by person" className={`${field} w-full py-2.5 text-sm sm:max-w-xs`}>
             <option value="all" className="bg-ink">Everyone</option>
             {people.map((p) => <option key={p} value={p} className="bg-ink">{p}</option>)}
           </select>

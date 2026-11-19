@@ -187,11 +187,24 @@ function NewTaskModal({ defaults = {}, projects, team, me, onClose, onSaved }) {
 /* ---------------- Task card + board ---------------- */
 // Cards are physical: they lift and tilt while dragged, spring into the column they are dropped on,
 // and neighbouring cards slide to fill the gap. Pointer-based, so it also works with touch.
-function TaskCard({ t, who, counts, onOpen, onDrag, onDrop }) {
+// Touch screens: dragging would block page scrolling, so cards there get a status picker instead.
+function useCoarse() {
+  const [c, setC] = useState(() => window.matchMedia('(pointer: coarse)').matches)
+  useEffect(() => {
+    const m = window.matchMedia('(pointer: coarse)')
+    const f = () => setC(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [])
+  return c
+}
+
+function TaskCard({ t, who, counts, onOpen, onDrag, onDrop, onMove }) {
   const moved = useRef(false)
+  const coarse = useCoarse()
   return (
     <motion.div
-      layout layoutId={t.id} drag dragSnapToOrigin dragMomentum={false} dragElastic={0.12}
+      layout layoutId={t.id} drag={!coarse} dragSnapToOrigin dragMomentum={false} dragElastic={0.12}
       initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
       whileHover={{ y: -2 }}
       whileDrag={{ scale: 1.05, rotate: 2, zIndex: 60, boxShadow: '0 28px 50px -14px rgba(0,0,0,.75)' }}
@@ -215,6 +228,11 @@ function TaskCard({ t, who, counts, onOpen, onDrag, onDrop }) {
         <span className="ml-auto flex items-center gap-2"><TimerButton task={t} /><Avatar person={who} /></span>
       </div>
       {t.created_by_email && <p className="mt-2 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
+      {coarse && (
+        <select value={t.status} onClick={(e) => e.stopPropagation()} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Move to" className="mt-3 w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm">
+          {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
+        </select>
+      )}
     </motion.div>
   )
 }
@@ -238,7 +256,7 @@ function Board({ tasks, whoOf, counts, onMove, onOpen, onAdd }) {
             </div>
             <div className="grid gap-3">
               {col.map((t) => (
-                <TaskCard key={t.id} t={t} who={whoOf(t)} counts={counts[t.id]} onOpen={onOpen}
+                <TaskCard key={t.id} t={t} who={whoOf(t)} counts={counts[t.id]} onOpen={onOpen} onMove={onMove}
                   onDrag={(pt) => setOver(colAt(pt))}
                   onDrop={(task, pt) => { setOver(null); const c = colAt(pt); if (c && c !== task.status) onMove(task.id, c) }} />
               ))}
@@ -329,8 +347,8 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
       <button onClick={() => navigate('#/projects')} className="mb-6 inline-flex items-center gap-2 text-sm text-snow/65 hover:text-snow"><Icon name="back" className="h-4 w-4" />Projects</button>
       <ErrorNote error={error} />
       <section className={`${card} mt-2 overflow-hidden`}>
-        <div className="flex flex-wrap items-center justify-between gap-6 p-6 md:p-8">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:items-center md:p-8">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
             <Ring pct={pct} />
             <div>
               {project.category && <p className="flex items-center gap-2 text-sm text-snow/65"><span className={`h-2 w-2 rounded-full ${cats.colorOf(project.category)}`} />{project.category}</p>}
@@ -344,13 +362,13 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
           </div>
           <button onClick={() => setEditing(true)} className={btnGhost}><Icon name="pencil" className="h-4 w-4" />Edit</button>
         </div>
-        <div className="grid divide-white/10 border-t border-white/10 sm:grid-cols-3 sm:divide-x">
+        <div className="grid divide-y divide-white/10 border-t border-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
             ['Tasks done', `${count('done')} / ${tasks.length}`, <Bar pct={pct} className="mt-3" />],
             ['In progress', String(count('in_progress')), <p className="mt-1 text-sm text-snow/50">{count('blocked')} blocked · {count('open')} open</p>],
             ['Due', overdueDays > 0 ? `${overdueDays} days late` : project.due_date ? fmtDate(project.due_date) : 'None', null],
           ].map(([k, v, extra]) => (
-            <div key={k} className="p-6">
+            <div key={k} className="p-5 sm:p-6">
               <p className={label}>{k}</p>
               <p className={`mt-2 text-2xl font-bold ${k === 'Due' && overdueDays > 0 ? 'text-pink' : ''}`}>{v}</p>
               {extra}
@@ -362,12 +380,12 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
       <div className="mb-5 mt-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{shown.length}{shown.length !== tasks.length ? ` of ${tasks.length}` : ''}</span></h2>
-          <p className="mt-1 text-sm text-snow/55">{view === 'board' ? 'Drag a card to change its status. Click a card for details, checklist and comments.' : 'Tick a task to mark it done. Click a title for details.'}</p>
+          <p className="mt-1 text-sm text-snow/55">{view === 'board' ? 'Drag a card (or use its menu on a phone) to change its status. Click a card for details, checklist and comments.' : 'Tick a task to mark it done. Click a title for details.'}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="glass flex rounded-full p-1 text-sm font-semibold" role="group" aria-label="Filter tasks by assignee">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="glass flex max-w-full overflow-x-auto rounded-full p-1 text-sm font-semibold [scrollbar-width:none]" role="group" aria-label="Filter tasks by assignee">
             {[[me.id, 'Assigned to me', tasks.filter((t) => t.assignee_id === me.id).length], ['all', 'Everyone', tasks.length], ['none', 'Unassigned', tasks.filter((t) => !t.assignee_id).length]].map(([v, l, n]) => (
-              <button key={v} onClick={() => setWho(v)} aria-pressed={who === v} className={`flex items-center gap-2 rounded-full px-4 py-1.5 ${who === v ? 'bg-snow text-ink' : 'text-snow/65 hover:text-snow'}`}>{l}<span className={`text-xs ${who === v ? 'text-ink/55' : 'text-snow/40'}`}>{n}</span></button>
+              <button key={v} onClick={() => setWho(v)} aria-pressed={who === v} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 sm:px-4 ${who === v ? 'bg-snow text-ink' : 'text-snow/65 hover:text-snow'}`}>{l}<span className={`text-xs ${who === v ? 'text-ink/55' : 'text-snow/40'}`}>{n}</span></button>
             ))}
           </div>
           {team.some((m) => m.user_id !== me.id) && (

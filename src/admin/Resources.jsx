@@ -39,7 +39,7 @@ function ResourceList({ navigate }) {
             <button key={s} onClick={() => setFilter(s)} className={`rounded-full border px-4 py-2 text-sm font-semibold capitalize ${filter === s ? 'border-snow bg-snow text-ink' : 'border-white/15 text-snow/75 hover:border-white/40'}`}>{s} <span className="opacity-60">{counts[s]}</span></button>
           ))}
         </div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resources" aria-label="Search resources" className={`${field} max-w-xs py-2.5 text-sm`} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resources" aria-label="Search resources" className={`${field} w-full py-2.5 text-sm sm:max-w-xs`} />
       </div>
 
       {items === null && !error && <p className="text-snow/55">Loading...</p>}

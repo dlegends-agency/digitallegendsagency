@@ -67,7 +67,7 @@ export default function Enquiries({ onChanged }) {
             </button>
           ))}
         </div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, email or message" aria-label="Search enquiries" className={`${field} max-w-xs py-2.5 text-sm`} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, email or message" aria-label="Search enquiries" className={`${field} w-full py-2.5 text-sm sm:max-w-xs`} />
       </div>
 
       <ErrorNote error={error} />
@@ -79,7 +79,7 @@ export default function Enquiries({ onChanged }) {
           <li key={r.id} className={card}>
             <button onClick={() => toggle(r)} className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 p-5 text-left">
               <span className="min-w-40 font-semibold">{r.name}</span>
-              <span className="text-snow/65">{r.email}</span>
+              <span className="min-w-0 text-snow/65">{r.email}</span>
               <span className="ml-auto flex items-center gap-4">
                 <span className="text-sm text-snow/45">{fmtDateTime(r.created_at)}</span>
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusStyle[r.status]}`}>{r.status}</span>

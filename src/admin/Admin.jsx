@@ -117,8 +117,8 @@ function Dashboard({ session, role }) {
   let page
   if (['log', 'users'].includes(route) && !isSuper) page = <Locked />
   else if (route === 'users') page = <Users me={session.user} />
-  else if (route === 'projects' && seg[1]) page = <ProjectDetail id={seg[1]} navigate={navigate} key={seg[1]} />
-  else if (route === 'projects') page = <Projects navigate={navigate} openNew={params.get('new')} key={hash} />
+  else if (route === 'projects' && seg[1]) page = <ProjectDetail id={seg[1]} navigate={navigate} key={seg[1]} me={session.user} isSuper={isSuper} />
+  else if (route === 'projects') page = <Projects navigate={navigate} openNew={params.get('new')} key={hash} me={session.user} isSuper={isSuper} />
   else if (route === 'enquiries') page = <Enquiries onChanged={refreshBadge} />
   else if (route === 'analytics') page = <Analytics />
   else if (route === 'content') page = <Content />

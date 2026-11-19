@@ -2,23 +2,84 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import {
-  field, label, btnWhite, btnGhost, card, STATUSES, statusLabel, statusDot, PRIORITY, CATEGORIES,
-  fmtDate, isOverdue, todayStr, Icon, Modal, Ring, Bar, ErrorNote, PageHeader,
+  field, label, btnWhite, btnGhost, card, STATUSES, PRIORITY,
+  fmtDate, isOverdue, todayStr, Icon, Modal, Ring, Bar, Avatar, ErrorNote, PageHeader,
 } from './ui'
+import { useCategories, useTeam, COLORS, COLOR_NAMES } from './data'
+import TaskDetail from './TaskDetail'
 
 const pctDone = (tasks) => (tasks.length ? Math.round((tasks.filter((t) => t.status === 'done').length / tasks.length) * 100) : 0)
 
-/* ---------------- Modals ---------------- */
-function ProjectModal({ project, onClose, onSaved, onDeleted }) {
+/* Checklist and comment counts for the cards. Silent if the tables are not set up yet. */
+async function fetchCounts(ids) {
+  if (!ids.length) return {}
+  const [c, m] = await Promise.all([
+    supabase.from('task_checklist_items').select('task_id,done').in('task_id', ids),
+    supabase.from('task_comments').select('task_id').in('task_id', ids),
+  ])
+  const map = {}
+  const at = (id) => (map[id] ||= { done: 0, total: 0, comments: 0 })
+  c.data?.forEach((r) => { const x = at(r.task_id); x.total++; if (r.done) x.done++ })
+  m.data?.forEach((r) => { at(r.task_id).comments++ })
+  return map
+}
+
+/* ---------------- Categories ---------------- */
+function CategoryManager({ cats, onClose }) {
+  const [error, setError] = useState('')
+  const [color, setColor] = useState('sky')
+  async function add(e) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const name = String(new FormData(form).get('name')).trim()
+    if (!name) return
+    const err = await cats.add(name, color)
+    if (err) setError(/duplicate|unique/i.test(err.message) ? 'That category already exists.' : err.message); else { setError(''); form.reset() }
+  }
+  async function remove(c) {
+    if (!window.confirm(`Delete the category "${c.name}"? Projects already using it keep the label.`)) return
+    const err = await cats.remove(c.id)
+    if (err) setError(err.message)
+  }
+  return (
+    <Modal title="Categories" onClose={onClose}>
+      <ul className="grid gap-1">
+        {cats.categories.map((c) => (
+          <li key={c.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/[0.04]">
+            <span className={`h-3 w-3 rounded-full ${COLORS[c.color]}`} />
+            <span className="flex-1">{c.name}</span>
+            <button onClick={() => remove(c)} aria-label={`Delete ${c.name}`} className="text-snow/40 hover:text-pink"><Icon name="trash" className="h-4 w-4" /></button>
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={add} className="mt-5 grid gap-3 border-t border-white/10 pt-5">
+        <div className="flex gap-2">
+          <input name="name" maxLength={60} placeholder="New category" aria-label="New category name" className={`${field} py-2.5 text-sm`} />
+          <button className={`${btnWhite} shrink-0`}>Add</button>
+        </div>
+        <div className="flex items-center gap-2" role="radiogroup" aria-label="Colour">
+          {COLOR_NAMES.map((n) => <button type="button" key={n} onClick={() => setColor(n)} role="radio" aria-checked={color === n} aria-label={n}
+            className={`h-6 w-6 rounded-full ${COLORS[n]} ${color === n ? 'ring-2 ring-snow ring-offset-2 ring-offset-[#0a0b22]' : ''}`} />)}
+        </div>
+        <ErrorNote error={error} />
+      </form>
+    </Modal>
+  )
+}
+
+/* ---------------- Project + task modals ---------------- */
+function ProjectModal({ project, cats, onClose, onSaved, onDeleted }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [manage, setManage] = useState(false)
+  const names = cats.categories.map((c) => c.name)
   async function submit(e) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const row = {
       name: String(f.get('name')).trim(),
       description: String(f.get('description')).trim() || null,
-      category: String(f.get('category')).trim() || null,
+      category: String(f.get('category')) || null,
       due_date: f.get('due_date') || null,
     }
     setBusy(true); setError('')
@@ -33,34 +94,41 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
     if (error) setError(error.message); else onDeleted(project.id)
   }
   return (
-    <Modal title={project ? 'Edit project' : 'New project'} onClose={onClose}>
-      <form onSubmit={submit} className="grid gap-4">
-        <label className={label}>Name<input name="name" required maxLength={200} defaultValue={project?.name} autoFocus className={`${field} mt-2 normal-case tracking-normal`} /></label>
-        <label className={label}>Description<textarea name="description" rows={3} maxLength={5000} defaultValue={project?.description || ''} className={`${field} mt-2 resize-none normal-case tracking-normal`} /></label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className={label}>Category
-            <input name="category" list="cats" maxLength={60} defaultValue={project?.category || ''} placeholder="Website, Client..." className={`${field} mt-2 normal-case tracking-normal`} />
-            <datalist id="cats">{CATEGORIES.map((c) => <option key={c} value={c} />)}</datalist>
-          </label>
-          <label className={label}>Due date<input name="due_date" type="date" defaultValue={project?.due_date || ''} className={`${field} mt-2 normal-case tracking-normal`} /></label>
-        </div>
-        <ErrorNote error={error} />
-        <div className="mt-2 flex items-center justify-between gap-3">
-          {project ? <button type="button" onClick={remove} className="text-sm text-pink hover:underline">Delete project</button> : <span />}
-          <button disabled={busy} className={btnWhite}>{busy ? 'Saving...' : 'Save project'}</button>
-        </div>
-      </form>
-    </Modal>
+    <>
+      <Modal title={project ? 'Edit project' : 'New project'} onClose={onClose}>
+        <form onSubmit={submit} className="grid gap-4">
+          <label className={label}>Name<input name="name" required maxLength={200} defaultValue={project?.name} placeholder="e.g. Client website" autoFocus className={`${field} mt-2 normal-case tracking-normal`} /></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="flex items-center justify-between"><span className={label}>Category</span><button type="button" onClick={() => setManage(true)} className="text-xs text-snow/55 underline decoration-white/20 underline-offset-4 hover:text-snow">Edit</button></div>
+              <select name="category" defaultValue={project?.category || names[0] || ''} className={`${field} mt-2 normal-case tracking-normal`}>
+                {project?.category && !names.includes(project.category) && <option value={project.category} className="bg-ink">{project.category}</option>}
+                {names.map((n) => <option key={n} value={n} className="bg-ink">{n}</option>)}
+              </select>
+            </div>
+            <label className={label}>Due date<input name="due_date" type="date" defaultValue={project?.due_date || ''} className={`${field} mt-2 normal-case tracking-normal`} /></label>
+          </div>
+          <label className={label}>Description<textarea name="description" rows={3} maxLength={5000} defaultValue={project?.description || ''} className={`${field} mt-2 resize-none normal-case tracking-normal`} /></label>
+          <ErrorNote error={error} />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            {project ? <button type="button" onClick={remove} className="text-sm text-pink hover:underline">Delete project</button> : <span />}
+            <button disabled={busy} className={btnWhite}>{busy ? 'Saving...' : project ? 'Save project' : 'Create project'}</button>
+          </div>
+        </form>
+      </Modal>
+      {manage && <CategoryManager cats={cats} onClose={() => setManage(false)} />}
+    </>
   )
 }
 
-function TaskModal({ task, defaults = {}, projects, onClose, onSaved, onDeleted }) {
+function NewTaskModal({ defaults = {}, projects, team, me, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   async function submit(e) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const status = String(f.get('status'))
+    const who = team.find((m) => m.user_id === f.get('assignee_id'))
     const row = {
       title: String(f.get('title')).trim(),
       description: String(f.get('description')).trim() || null,
@@ -68,50 +136,48 @@ function TaskModal({ task, defaults = {}, projects, onClose, onSaved, onDeleted 
       priority: String(f.get('priority')),
       due_date: f.get('due_date') || null,
       project_id: f.get('project_id') || null,
+      assignee_id: who ? who.user_id : null,
+      assignee_email: who ? who.email : null,
       tags: String(f.get('tags')).split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10),
-      completed_at: status === 'done' ? (task?.completed_at || new Date().toISOString()) : null,
+      completed_at: status === 'done' ? new Date().toISOString() : null,
     }
     setBusy(true); setError('')
-    const q = task ? supabase.from('tasks').update(row).eq('id', task.id).select().single() : supabase.from('tasks').insert(row).select().single()
-    const { data, error } = await q
+    const { data, error } = await supabase.from('tasks').insert(row).select().single()
     setBusy(false)
     if (error) setError(error.message); else onSaved(data)
   }
-  async function remove() {
-    if (!window.confirm('Delete this task?')) return
-    const { error } = await supabase.from('tasks').delete().eq('id', task.id)
-    if (error) setError(error.message); else onDeleted(task.id)
-  }
-  const v = { ...defaults, ...task }
+  const sel = `${field} mt-2 normal-case tracking-normal`
   return (
-    <Modal title={task ? 'Edit task' : 'New task'} onClose={onClose} wide>
+    <Modal title="New task" onClose={onClose} wide>
       <form onSubmit={submit} className="grid gap-4">
-        <label className={label}>Title<input name="title" required maxLength={300} defaultValue={v.title} autoFocus className={`${field} mt-2 normal-case tracking-normal`} /></label>
-        <label className={label}>Description<textarea name="description" rows={3} maxLength={5000} defaultValue={v.description || ''} className={`${field} mt-2 resize-none normal-case tracking-normal`} /></label>
+        <label className={label}>Title<input name="title" required maxLength={300} autoFocus className={sel} /></label>
+        <label className={label}>Description<textarea name="description" rows={3} maxLength={5000} className={`${sel} resize-none`} /></label>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className={label}>Status
-            <select name="status" defaultValue={v.status || 'open'} className={`${field} mt-2 normal-case tracking-normal`}>{STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}</select>
+            <select name="status" defaultValue={defaults.status || 'open'} className={sel}>{STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}</select>
           </label>
           <label className={label}>Priority
-            <select name="priority" defaultValue={v.priority || 'medium'} className={`${field} mt-2 normal-case tracking-normal`}>{['high', 'medium', 'low'].map((p) => <option key={p} value={p} className="bg-ink capitalize">{p}</option>)}</select>
+            <select name="priority" defaultValue="medium" className={sel}>{['high', 'medium', 'low'].map((p) => <option key={p} value={p} className="bg-ink capitalize">{p}</option>)}</select>
           </label>
-          <label className={label}>Due date<input name="due_date" type="date" defaultValue={v.due_date || ''} className={`${field} mt-2 normal-case tracking-normal`} /></label>
+          <label className={label}>Due date<input name="due_date" type="date" className={sel} /></label>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
+          <label className={label}>Assign to
+            <select name="assignee_id" defaultValue="" className={sel}>
+              <option value="" className="bg-ink">Unassigned</option>
+              {team.map((m) => <option key={m.user_id} value={m.user_id} className="bg-ink">{m.full_name || m.email}{m.user_id === me.id ? ' (you)' : ''}</option>)}
+            </select>
+          </label>
           <label className={label}>Project
-            <select name="project_id" defaultValue={v.project_id || ''} className={`${field} mt-2 normal-case tracking-normal`}>
+            <select name="project_id" defaultValue={defaults.project_id || ''} className={sel}>
               <option value="" className="bg-ink">No project (quick task)</option>
               {projects.map((p) => <option key={p.id} value={p.id} className="bg-ink">{p.name}</option>)}
             </select>
           </label>
-          <label className={label}>Tags<input name="tags" defaultValue={(v.tags || []).join(', ')} placeholder="design, content" className={`${field} mt-2 normal-case tracking-normal`} /></label>
         </div>
-        {task?.created_by_email && <p className="text-xs text-snow/45">Created by {task.created_by_email} on {fmtDate(task.created_at.slice(0, 10))}</p>}
+        <label className={label}>Tags<input name="tags" placeholder="design, content" className={sel} /></label>
         <ErrorNote error={error} />
-        <div className="mt-2 flex items-center justify-between gap-3">
-          {task ? <button type="button" onClick={remove} className="text-sm text-pink hover:underline">Delete task</button> : <span />}
-          <button disabled={busy} className={btnWhite}>{busy ? 'Saving...' : 'Save task'}</button>
-        </div>
+        <div className="mt-2 flex justify-end"><button disabled={busy} className={btnWhite}>{busy ? 'Saving...' : 'Create task'}</button></div>
       </form>
     </Modal>
   )
@@ -120,7 +186,7 @@ function TaskModal({ task, defaults = {}, projects, onClose, onSaved, onDeleted 
 /* ---------------- Task card + board ---------------- */
 // Cards are physical: they lift and tilt while dragged, spring into the column they are dropped on,
 // and neighbouring cards slide to fill the gap. Pointer-based, so it also works with touch.
-function TaskCard({ t, onOpen, onDrag, onDrop }) {
+function TaskCard({ t, who, counts, onOpen, onDrag, onDrop }) {
   const moved = useRef(false)
   return (
     <motion.div
@@ -142,12 +208,17 @@ function TaskCard({ t, onOpen, onDrag, onDrop }) {
         {t.due_date && <span className={`rounded-full px-2.5 py-1 text-xs ${isOverdue(t) ? 'bg-pink/20 text-pink' : 'bg-white/10 text-snow/65'}`}>Due {fmtDate(t.due_date)}</span>}
         {t.tags?.map((g) => <span key={g} className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-snow/65">{g}</span>)}
       </div>
-      {t.created_by_email && <p className="mt-3 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
+      <div className="mt-3 flex items-center gap-3 text-xs text-snow/50">
+        {counts?.total > 0 && <span className={`flex items-center gap-1 ${counts.done === counts.total ? 'text-emerald-300' : ''}`}><Icon name="check" className="h-3.5 w-3.5" />{counts.done}/{counts.total}</span>}
+        {counts?.comments > 0 && <span className="flex items-center gap-1"><Icon name="comment" className="h-3.5 w-3.5" />{counts.comments}</span>}
+        <span className="ml-auto"><Avatar person={who} /></span>
+      </div>
+      {t.created_by_email && <p className="mt-2 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
     </motion.div>
   )
 }
 
-function Board({ tasks, onMove, onOpen, onAdd }) {
+function Board({ tasks, whoOf, counts, onMove, onOpen, onAdd }) {
   const [over, setOver] = useState(null)
   const colAt = (pt) => {
     const hit = document.elementsFromPoint(pt.x - window.scrollX, pt.y - window.scrollY).find((el) => el.dataset?.col)
@@ -166,7 +237,7 @@ function Board({ tasks, onMove, onOpen, onAdd }) {
             </div>
             <div className="grid gap-3">
               {col.map((t) => (
-                <TaskCard key={t.id} t={t} onOpen={onOpen}
+                <TaskCard key={t.id} t={t} who={whoOf(t)} counts={counts[t.id]} onOpen={onOpen}
                   onDrag={(pt) => setOver(colAt(pt))}
                   onDrop={(task, pt) => { setOver(null); const c = colAt(pt); if (c && c !== task.status) onMove(task.id, c) }} />
               ))}
@@ -179,35 +250,45 @@ function Board({ tasks, onMove, onOpen, onAdd }) {
   )
 }
 
-function TaskList({ tasks, onMove, onOpen }) {
-  if (!tasks.length) return <p className="text-snow/55">No tasks yet.</p>
+function TaskList({ tasks, whoOf, counts, onMove, onOpen }) {
+  if (!tasks.length) return <p className="text-snow/55">No tasks to show.</p>
   return (
     <ul className={`${card} divide-y divide-white/10`}>
-      {tasks.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center gap-3 p-4">
-          <input type="checkbox" checked={t.status === 'done'} onChange={(e) => onMove(t.id, e.target.checked ? 'done' : 'open')} aria-label={`Mark ${t.title} done`} className="h-4 w-4 accent-pink" />
-          <button onClick={() => onOpen(t)} className={`min-w-40 flex-1 text-left font-semibold ${t.status === 'done' ? 'text-snow/45 line-through' : ''}`}>{t.title}</button>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${PRIORITY[t.priority]}`}>{t.priority}</span>
-          {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>Due {fmtDate(t.due_date)}</span>}
-          {t.created_by_email && <span className="hidden max-w-[220px] truncate text-xs text-snow/40 lg:inline" title={t.created_by_email}>by {t.created_by_email}</span>}
-          <select value={t.status} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Status" className="rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-sm">
-            {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
-          </select>
-        </li>
-      ))}
+      {tasks.map((t) => {
+        const c = counts[t.id]
+        return (
+          <li key={t.id} className="flex flex-wrap items-center gap-3 p-4">
+            <input type="checkbox" checked={t.status === 'done'} onChange={(e) => onMove(t.id, e.target.checked ? 'done' : 'open')} aria-label={`Mark ${t.title} done`} className="h-4 w-4 accent-pink" />
+            <button onClick={() => onOpen(t)} className={`min-w-40 flex-1 text-left font-semibold ${t.status === 'done' ? 'text-snow/45 line-through' : ''}`}>{t.title}</button>
+            {c?.total > 0 && <span className="flex items-center gap-1 text-xs text-snow/50"><Icon name="check" className="h-3.5 w-3.5" />{c.done}/{c.total}</span>}
+            {c?.comments > 0 && <span className="flex items-center gap-1 text-xs text-snow/50"><Icon name="comment" className="h-3.5 w-3.5" />{c.comments}</span>}
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${PRIORITY[t.priority]}`}>{t.priority}</span>
+            {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>Due {fmtDate(t.due_date)}</span>}
+            <Avatar person={whoOf(t)} />
+            <select value={t.status} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Status" className="rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-sm">
+              {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
+            </select>
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
 /* ---------------- Project detail ---------------- */
-export function ProjectDetail({ id, navigate }) {
+export function ProjectDetail({ id, navigate, me, isSuper }) {
   const [project, setProject] = useState(undefined)
   const [tasks, setTasks] = useState([])
   const [projects, setProjects] = useState([])
+  const [counts, setCounts] = useState({})
   const [error, setError] = useState('')
   const [view, setView] = useState(() => localStorage.getItem('dl_task_view') || 'board')
-  const [taskModal, setTaskModal] = useState(null)
+  const [who, setWho] = useState('all')
+  const [newTask, setNewTask] = useState(null)
+  const [openTask, setOpenTask] = useState(null)
   const [editing, setEditing] = useState(false)
+  const cats = useCategories()
+  const { team, find } = useTeam()
 
   useEffect(() => {
     setProject(undefined)
@@ -215,22 +296,24 @@ export function ProjectDetail({ id, navigate }) {
       supabase.from('projects').select('*').eq('id', id).maybeSingle(),
       supabase.from('tasks').select('*').eq('project_id', id).order('created_at'),
       supabase.from('projects').select('id,name').order('name'),
-    ]).then(([p, t, all]) => {
+    ]).then(async ([p, t, all]) => {
       const err = p.error || t.error || all.error
       if (err) setError(err.message)
       setProject(p.data || null); setTasks(t.data || []); setProjects(all.data || [])
+      setCounts(await fetchCounts((t.data || []).map((x) => x.id)))
     })
   }, [id])
 
   const move = useCallback(async (taskId, status) => {
     const prev = tasks
-    setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, status, completed_at: status === 'done' ? new Date().toISOString() : null } : t)))
-    const { error } = await supabase.from('tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', taskId)
+    const done = status === 'done' ? new Date().toISOString() : null
+    setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, status, completed_at: done } : t)))
+    const { error } = await supabase.from('tasks').update({ status, completed_at: done }).eq('id', taskId)
     if (error) { setTasks(prev); setError(error.message) }
   }, [tasks])
 
   const setViewPersist = (v) => { setView(v); localStorage.setItem('dl_task_view', v) }
-  const saved = (t) => { setTasks((ts) => (ts.some((x) => x.id === t.id) ? ts.map((x) => (x.id === t.id ? t : x)) : [...ts, t]).filter((x) => x.project_id === id)); setTaskModal(null) }
+  const shown = tasks.filter((t) => who === 'all' || (who === 'none' ? !t.assignee_id : t.assignee_id === who))
 
   if (project === undefined) return <p className="text-snow/55">Loading...</p>
   if (!project) return <div><ErrorNote error={error} /><p className="text-snow/70">Project not found.</p><button onClick={() => navigate('#/projects')} className={`${btnGhost} mt-4`}>Back to projects</button></div>
@@ -248,7 +331,7 @@ export function ProjectDetail({ id, navigate }) {
           <div className="flex items-center gap-6">
             <Ring pct={pct} />
             <div>
-              {project.category && <p className="flex items-center gap-2 text-sm text-snow/65"><span className="h-2 w-2 rounded-full bg-sky" />{project.category}</p>}
+              {project.category && <p className="flex items-center gap-2 text-sm text-snow/65"><span className={`h-2 w-2 rounded-full ${cats.colorOf(project.category)}`} />{project.category}</p>}
               <h1 className="text-3xl font-bold tracking-[-0.04em] md:text-4xl">{project.name}</h1>
               <p className="mt-1 text-sm text-snow/55">
                 {overdueDays > 0 ? <span className="text-pink">Overdue {fmtDate(project.due_date)}</span> : project.due_date ? `Due ${fmtDate(project.due_date)}` : 'No due date'} · {count('done')} / {tasks.length} tasks done
@@ -276,35 +359,48 @@ export function ProjectDetail({ id, navigate }) {
 
       <div className="mb-5 mt-10 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{tasks.length}</span></h2>
-          <p className="mt-1 text-sm text-snow/55">{view === 'board' ? 'Drag a card to another column to change its status' : 'Tick a task to mark it done'}</p>
+          <h2 className="text-2xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{shown.length}</span></h2>
+          <p className="mt-1 text-sm text-snow/55">{view === 'board' ? 'Drag a card to change its status. Click a card for details, checklist and comments.' : 'Tick a task to mark it done. Click a title for details.'}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Filter by assignee" className="glass rounded-full bg-transparent px-4 py-2 text-sm font-semibold outline-none">
+            <option value="all" className="bg-ink">Everyone</option>
+            <option value={me.id} className="bg-ink">Assigned to me</option>
+            <option value="none" className="bg-ink">Unassigned</option>
+            {team.filter((m) => m.user_id !== me.id).map((m) => <option key={m.user_id} value={m.user_id} className="bg-ink">{m.full_name || m.email}</option>)}
+          </select>
           <div className="glass flex rounded-full p-1 text-sm font-semibold">
             {['list', 'board'].map((v) => <button key={v} onClick={() => setViewPersist(v)} className={`rounded-full px-4 py-1.5 capitalize ${view === v ? 'bg-snow text-ink' : 'text-snow/65'}`}>{v}</button>)}
           </div>
-          <button onClick={() => setTaskModal({ defaults: { project_id: id } })} className={btnWhite}><Icon name="plus" className="h-4 w-4" />New task</button>
+          <button onClick={() => setNewTask({ project_id: id })} className={btnWhite}><Icon name="plus" className="h-4 w-4" />New task</button>
         </div>
       </div>
 
       {view === 'board'
-        ? <Board tasks={tasks} onMove={move} onOpen={(t) => setTaskModal({ task: t })} onAdd={(status) => setTaskModal({ defaults: { project_id: id, status } })} />
-        : <TaskList tasks={tasks} onMove={move} onOpen={(t) => setTaskModal({ task: t })} />}
+        ? <Board tasks={shown} whoOf={find} counts={counts} onMove={move} onOpen={setOpenTask} onAdd={(status) => setNewTask({ project_id: id, status })} />
+        : <TaskList tasks={shown} whoOf={find} counts={counts} onMove={move} onOpen={setOpenTask} />}
 
-      {taskModal && <TaskModal task={taskModal.task} defaults={taskModal.defaults} projects={projects} onClose={() => setTaskModal(null)} onSaved={saved}
-        onDeleted={(tid) => { setTasks((ts) => ts.filter((t) => t.id !== tid)); setTaskModal(null) }} />}
-      {editing && <ProjectModal project={project} onClose={() => setEditing(false)} onSaved={(p) => { setProject(p); setEditing(false) }} onDeleted={() => navigate('#/projects')} />}
+      {newTask && <NewTaskModal defaults={newTask} projects={projects} team={team} me={me} onClose={() => setNewTask(null)}
+        onSaved={(t) => { if (t.project_id === id) setTasks((ts) => [...ts, t]); setNewTask(null) }} />}
+      {openTask && <TaskDetail task={openTask} projects={projects} team={team} me={me} isSuper={isSuper} onClose={() => setOpenTask(null)}
+        onChange={(t) => { setTasks((ts) => (t.project_id === id ? ts.map((x) => (x.id === t.id ? t : x)) : ts.filter((x) => x.id !== t.id))) }}
+        onDeleted={(tid) => { setTasks((ts) => ts.filter((t) => t.id !== tid)); setOpenTask(null) }}
+        onCounts={(tid, c) => setCounts((m) => ({ ...m, [tid]: c }))} />}
+      {editing && <ProjectModal project={project} cats={cats} onClose={() => setEditing(false)} onSaved={(p) => { setProject(p); setEditing(false) }} onDeleted={() => navigate('#/projects')} />}
     </div>
   )
 }
 
 /* ---------------- Projects list ---------------- */
-export function Projects({ navigate, openNew }) {
+export function Projects({ navigate, openNew, me, isSuper }) {
   const [projects, setProjects] = useState(null)
   const [tasks, setTasks] = useState([])
   const [error, setError] = useState('')
   const [cat, setCat] = useState('All')
   const [modal, setModal] = useState(openNew === 'project' ? 'project' : openNew === 'task' ? 'task' : null)
+  const [openTask, setOpenTask] = useState(null)
+  const cats = useCategories()
+  const { team } = useTeam()
 
   const load = useCallback(async () => {
     const [p, t] = await Promise.all([
@@ -316,7 +412,7 @@ export function Projects({ navigate, openNew }) {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const cats = useMemo(() => ['All', ...new Set((projects || []).map((p) => p.category).filter(Boolean))], [projects])
+  const catNames = useMemo(() => ['All', ...new Set((projects || []).map((p) => p.category).filter(Boolean))], [projects])
   const shown = (projects || []).filter((p) => cat === 'All' || p.category === cat)
   const quick = tasks.filter((t) => !t.project_id)
   const openCount = tasks.filter((t) => t.status !== 'done').length
@@ -329,9 +425,9 @@ export function Projects({ navigate, openNew }) {
   }
   async function addQuick(e) {
     e.preventDefault()
-    const title = new FormData(e.currentTarget).get('title').toString().trim()
-    if (!title) return
     const form = e.currentTarget
+    const title = new FormData(form).get('title').toString().trim()
+    if (!title) return
     const { data, error } = await supabase.from('tasks').insert({ title }).select().single()
     if (error) setError(error.message); else { setTasks((ts) => [...ts, data]); form.reset() }
   }
@@ -344,9 +440,13 @@ export function Projects({ navigate, openNew }) {
       </PageHeader>
       <ErrorNote error={error} />
 
-      {cats.length > 2 && (
+      {catNames.length > 2 && (
         <div className="mb-6 flex flex-wrap gap-2">
-          {cats.map((c) => <button key={c} onClick={() => setCat(c)} className={`rounded-full border px-4 py-2 text-sm font-semibold ${cat === c ? 'border-snow bg-snow text-ink' : 'border-white/15 text-snow/75 hover:border-white/40'}`}>{c}</button>)}
+          {catNames.map((c) => (
+            <button key={c} onClick={() => setCat(c)} className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${cat === c ? 'border-snow bg-snow text-ink' : 'border-white/15 text-snow/75 hover:border-white/40'}`}>
+              {c !== 'All' && <span className={`h-2 w-2 rounded-full ${cats.colorOf(c)}`} />}{c}
+            </button>
+          ))}
         </div>
       )}
 
@@ -359,7 +459,7 @@ export function Projects({ navigate, openNew }) {
             return (
               <button key={p.id} onClick={() => navigate(`#/projects/${p.id}`)} className={`${card} p-6 text-left transition-colors hover:border-white/30 hover:bg-white/[0.06]`}>
                 <div className="flex items-center justify-between gap-2 text-xs text-snow/60">
-                  <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-sky" />{p.category || 'Project'}</span>
+                  <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${cats.colorOf(p.category)}`} />{p.category || 'Project'}</span>
                   {p.due_date && <span className={`rounded-full px-2.5 py-1 ${late ? 'bg-pink/20 text-pink' : 'bg-white/10'}`}>Due {fmtDate(p.due_date)}</span>}
                 </div>
                 <h3 className="mt-5 text-2xl font-bold tracking-[-0.03em]">{p.name}</h3>
@@ -381,7 +481,7 @@ export function Projects({ navigate, openNew }) {
             {quick.map((t) => (
               <li key={t.id} className="flex items-center gap-3 rounded-lg py-1.5">
                 <input type="checkbox" checked={t.status === 'done'} onChange={() => toggleQuick(t)} aria-label={`Mark ${t.title} done`} className="h-4 w-4 accent-pink" />
-                <span className={t.status === 'done' ? 'text-snow/45 line-through' : ''}>{t.title}</span>
+                <button onClick={() => setOpenTask(t)} className={`flex-1 text-left ${t.status === 'done' ? 'text-snow/45 line-through' : ''}`}>{t.title}</button>
               </li>
             ))}
           </ul>
@@ -392,8 +492,11 @@ export function Projects({ navigate, openNew }) {
         </aside>
       </div>
 
-      {modal === 'project' && <ProjectModal onClose={() => setModal(null)} onSaved={(p) => { setModal(null); navigate(`#/projects/${p.id}`) }} />}
-      {modal === 'task' && <TaskModal projects={projects || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+      {modal === 'project' && <ProjectModal cats={cats} onClose={() => setModal(null)} onSaved={(p) => { setModal(null); navigate(`#/projects/${p.id}`) }} />}
+      {modal === 'task' && <NewTaskModal projects={projects || []} team={team} me={me} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+      {openTask && <TaskDetail task={openTask} projects={projects || []} team={team} me={me} isSuper={isSuper} onClose={() => { setOpenTask(null); load() }}
+        onChange={(t) => setTasks((ts) => ts.map((x) => (x.id === t.id ? t : x)))}
+        onDeleted={(tid) => { setTasks((ts) => ts.filter((t) => t.id !== tid)); setOpenTask(null) }} />}
     </div>
   )
 }

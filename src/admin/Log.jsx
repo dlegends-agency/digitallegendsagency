@@ -8,8 +8,8 @@ const entityStyle = {
   project: 'bg-sky/20 text-sky', task: 'bg-violet/25 text-violet', enquiry: 'bg-pink/20 text-pink',
   content: 'bg-white/10 text-snow/70', user: 'bg-amber-400/20 text-amber-300',
 }
-const actionIcon = { created: 'plus', updated: 'pencil', moved: 'refresh', deleted: 'trash' }
-const actionColor = { created: 'text-emerald-300', updated: 'text-sky', moved: 'text-violet', deleted: 'text-pink' }
+const actionIcon = { created: 'plus', updated: 'pencil', moved: 'refresh', deleted: 'trash', assigned: 'users', commented: 'comment' }
+const actionColor = { created: 'text-emerald-300', updated: 'text-sky', moved: 'text-violet', deleted: 'text-pink', assigned: 'text-amber-300', commented: 'text-sky' }
 
 const needsSetup = (msg) => /schema cache|does not exist|permission denied|42501|PGRST205/i.test(msg || '')
 const friendly = (msg) => (needsSetup(msg) ? 'The activity log is not set up yet, or you are not the super admin. Run the latest supabase/schema.sql in the Supabase SQL Editor, then refresh.' : msg)

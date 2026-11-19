@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export const field = 'w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-3 text-base text-snow placeholder:text-snow/35 outline-none transition-colors focus:border-white/40'
 export const label = 'block text-xs font-semibold uppercase tracking-[0.16em] text-snow/45'
@@ -39,6 +39,8 @@ const paths = {
   pencil: <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />,
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  comment: <path d="M4 5h16v11H9l-5 4V5z" />,
   users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.8a3.5 3.5 0 010 6.4M21.5 20c0-2.8-1.5-4.8-4-5.6" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>,
@@ -52,13 +54,23 @@ export function Icon({ name, className = 'h-5 w-5' }) {
   )
 }
 
+const modalStack = []
 export function Modal({ title, onClose, children, wide = false }) {
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose()
+    // Escape closes only the top-most window, even when windows are stacked.
+    const id = Symbol('modal')
+    modalStack.push(id)
+    const onKey = (e) => { if (e.key === 'Escape' && modalStack[modalStack.length - 1] === id) closeRef.current() }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
-  }, [onClose])
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      modalStack.splice(modalStack.indexOf(id), 1)
+      if (!modalStack.length) document.body.style.overflow = ''
+    }
+  }, [])
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={title} className={`w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} rounded-3xl border border-white/12 bg-[#0a0b22] p-6 shadow-2xl md:p-8`}>
@@ -107,4 +119,15 @@ export function PageHeader({ title, sub, children }) {
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )
+}
+
+const AVATAR_GRADIENTS = ['from-sky to-violet', 'from-violet to-pink', 'from-sky to-pink', 'from-emerald-400 to-sky', 'from-amber-400 to-pink']
+export function Avatar({ person, size = 'h-7 w-7', text = 'text-xs' }) {
+  const name = person?.full_name || person?.email || person?.author_email || ''
+  if (!name) {
+    return <span title="Unassigned" className={`${size} grid shrink-0 place-items-center rounded-full border border-dashed border-white/25 text-snow/40`}><Icon name="users" className="h-3.5 w-3.5" /></span>
+  }
+  const key = person.email || person.author_email || name
+  const hue = [...key].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length
+  return <span title={person.full_name ? `${person.full_name} (${key})` : key} className={`${size} ${text} grid shrink-0 place-items-center rounded-full bg-gradient-to-br ${AVATAR_GRADIENTS[hue]} font-bold`}>{name[0].toUpperCase()}</span>
 }

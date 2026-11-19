@@ -25,7 +25,7 @@ export default function Today({ user, navigate }) {
   const m = useMemo(() => {
     if (!data) return null
     const open = data.tasks.filter((t) => t.status !== 'done')
-    const attention = open.filter((t) => t.status === 'in_progress' || t.status === 'blocked' || isOverdue(t) || (t.due_date && t.due_date <= new Date(Date.now() + 7 * 864e5).toLocaleDateString('en-CA'))).slice(0, 8)
+    const attention = open.filter((t) => t.assignee_id === user.id).slice(0, 8)
     const days = Array.from({ length: 7 }, (_, i) => dayKey(new Date(Date.now() - (6 - i) * 864e5)))
     const perDay = Object.fromEntries(days.map((d) => [d, 0]))
     data.views.forEach((v) => { const k = dayKey(v.created_at); if (k in perDay) perDay[k]++ })
@@ -36,7 +36,7 @@ export default function Today({ user, navigate }) {
       overdue: open.filter(isOverdue).length,
       attention, perDay: Object.entries(perDay),
     }
-  }, [data])
+  }, [data, user.id])
 
   async function complete(t) {
     setData((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === t.id ? { ...x, status: 'done' } : x)) }))
@@ -79,10 +79,10 @@ export default function Today({ user, navigate }) {
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <section className={`${card} p-6`}>
-          <div className="flex items-center justify-between"><h2 className="text-xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{m?.attention.length ?? 0}</span></h2>
+          <div className="flex items-center justify-between"><h2 className="text-xl font-bold tracking-[-0.03em]">Your tasks <span className="text-snow/45">{m?.attention.length ?? 0}</span></h2>
             <button onClick={() => navigate('#/projects')} className="text-sm text-snow/55 hover:text-snow">See all</button></div>
           <ul className="mt-4 divide-y divide-white/10">
-            {m && !m.attention.length && <li className="py-3 text-snow/55">Nothing due or in progress.</li>}
+            {m && !m.attention.length && <li className="py-3 text-snow/55">Nothing is assigned to you. Tasks assigned to you will show up here.</li>}
             {m?.attention.map((t) => (
               <li key={t.id} className="flex items-center gap-3 py-3">
                 <input type="checkbox" onChange={() => complete(t)} checked={t.status === 'done'} aria-label={`Mark ${t.title} done`} className="h-4 w-4 accent-pink" />

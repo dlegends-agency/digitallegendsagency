@@ -61,6 +61,42 @@ create index if not exists tasks_project_idx on public.tasks (project_id);
 alter table public.projects add column if not exists created_by_email text default (auth.jwt() ->> 'email');
 alter table public.tasks    add column if not exists created_by_email text default (auth.jwt() ->> 'email');
 
+-- Task assignment: who is responsible for a task.
+alter table public.tasks add column if not exists assignee_id uuid references auth.users (id) on delete set null;
+alter table public.tasks add column if not exists assignee_email text;
+
+-- Project categories, managed from the dashboard.
+create table if not exists public.categories (
+  id         uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  name       text not null unique check (char_length(name) between 1 and 60),
+  color      text not null default 'sky' check (color in ('sky', 'violet', 'pink', 'emerald', 'amber', 'slate'))
+);
+insert into public.categories (name, color) values
+  ('Website', 'sky'), ('Client', 'violet'), ('Marketing', 'pink'), ('Internal', 'amber'), ('Product', 'emerald')
+on conflict (name) do nothing;
+
+-- Checklist items and comments on a task.
+create table if not exists public.task_checklist_items (
+  id         uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  task_id    uuid not null references public.tasks (id) on delete cascade,
+  text       text not null check (char_length(text) between 1 and 300),
+  done       boolean not null default false,
+  position   int not null default 0
+);
+create index if not exists checklist_task_idx on public.task_checklist_items (task_id);
+
+create table if not exists public.task_comments (
+  id           uuid primary key default gen_random_uuid(),
+  created_at   timestamptz not null default now(),
+  task_id      uuid not null references public.tasks (id) on delete cascade,
+  body         text not null check (char_length(body) between 1 and 5000),
+  author_id    uuid default auth.uid(),
+  author_email text default (auth.jwt() ->> 'email')
+);
+create index if not exists comments_task_idx on public.task_comments (task_id);
+
 -- Privacy-friendly analytics: no cookies, no IP addresses, no personal data.
 create table if not exists public.analytics_events (
   id          uuid primary key default gen_random_uuid(),
@@ -103,6 +139,9 @@ grant select, insert, update, delete on public.tasks            to authenticated
 grant insert                         on public.analytics_events to anon, authenticated;
 grant select, delete                 on public.analytics_events to authenticated;
 grant select                         on public.activity_log     to authenticated;
+grant select, insert, update, delete on public.categories       to authenticated;
+grant select, insert, update, delete on public.task_checklist_items to authenticated;
+grant select, insert, delete         on public.task_comments    to authenticated;
 
 -- ============================================================
 -- Row-level security
@@ -114,6 +153,9 @@ alter table public.projects         enable row level security;
 alter table public.tasks            enable row level security;
 alter table public.analytics_events enable row level security;
 alter table public.activity_log     enable row level security;
+alter table public.categories       enable row level security;
+alter table public.task_checklist_items enable row level security;
+alter table public.task_comments    enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -203,6 +245,45 @@ drop policy if exists "super admin reads activity" on public.activity_log;
 create policy "super admin reads activity" on public.activity_log
   for select to authenticated using (public.is_super_admin());
 
+-- categories and checklists: any admin.
+drop policy if exists "admins manage categories" on public.categories;
+create policy "admins manage categories" on public.categories
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "admins manage checklists" on public.task_checklist_items;
+create policy "admins manage checklists" on public.task_checklist_items
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- comments: any admin can read and write. You can delete your own; the super admin can delete any.
+drop policy if exists "admins read comments" on public.task_comments;
+create policy "admins read comments" on public.task_comments
+  for select to authenticated using (public.is_admin());
+
+drop policy if exists "admins add comments" on public.task_comments;
+create policy "admins add comments" on public.task_comments
+  for insert to authenticated with check (public.is_admin() and author_id = auth.uid());
+
+drop policy if exists "delete own comments" on public.task_comments;
+create policy "delete own comments" on public.task_comments
+  for delete to authenticated using (public.is_admin() and (author_id = auth.uid() or public.is_super_admin()));
+
+-- The people a task can be assigned to. Any admin may list the team (not just the super admin).
+create or replace function public.list_team()
+returns table (user_id uuid, email text, full_name text, role text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select a.user_id, u.email::text, coalesce(u.raw_user_meta_data ->> 'full_name', ''), a.role
+  from public.admins a
+  join auth.users u on u.id = a.user_id
+  where public.is_admin()
+  order by u.email;
+$$;
+revoke all on function public.list_team() from public, anon;
+grant execute on function public.list_team() to authenticated;
+
 -- ============================================================
 -- Activity log triggers: record who created, moved, edited or deleted what.
 -- ============================================================
@@ -217,6 +298,7 @@ declare
   ent text := tg_argv[0];
   act text;
   msg text;
+  tname text;
 begin
   if ent = 'project' then
     if tg_op = 'INSERT' then act := 'created'; msg := 'Created project "' || new.name || '"';
@@ -228,8 +310,16 @@ begin
       if old.status is distinct from new.status then
         act := 'moved';
         msg := 'Moved task "' || new.title || '" from ' || replace(old.status, '_', ' ') || ' to ' || replace(new.status, '_', ' ');
+      elsif old.assignee_email is distinct from new.assignee_email then
+        act := 'assigned';
+        msg := case when new.assignee_email is null then 'Unassigned task "' || new.title || '"'
+                    else 'Assigned task "' || new.title || '" to ' || new.assignee_email end;
       else act := 'updated'; msg := 'Updated task "' || new.title || '"'; end if;
     else act := 'deleted'; msg := 'Deleted task "' || old.title || '"'; end if;
+  elsif ent = 'comment' then
+    select title into tname from public.tasks where id = new.task_id;
+    act := 'commented'; ent := 'task';
+    msg := 'Commented on task "' || coalesce(tname, 'deleted task') || '"';
   elsif ent = 'enquiry' then
     if tg_op = 'INSERT' then act := 'created'; msg := 'New enquiry from ' || new.name;
     elsif tg_op = 'UPDATE' then
@@ -255,6 +345,10 @@ create trigger log_projects after insert or update or delete on public.projects
 drop trigger if exists log_tasks on public.tasks;
 create trigger log_tasks after insert or update or delete on public.tasks
   for each row execute function public.log_activity('task');
+
+drop trigger if exists log_comments on public.task_comments;
+create trigger log_comments after insert on public.task_comments
+  for each row execute function public.log_activity('comment');
 
 drop trigger if exists log_leads on public.leads;
 create trigger log_leads after insert or update or delete on public.leads

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import QuickLog from './QuickLog'
@@ -31,21 +31,89 @@ function Num({ value, format = String, className = '' }) {
   return <span className={`tabular-nums ${className}`}>{format(useCountUp(value))}</span>
 }
 
-function Spark({ data, color = '#2f7bff' }) {
+/* Smooth curve through the points that never dips below or above them (monotone cubic). */
+function monotone(pts) {
+  const n = pts.length
+  if (n < 2) return ''
+  const dx = [], m = []
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; m[i] = (pts[i + 1][1] - pts[i][1]) / dx[i] }
+  const t = [m[0]]
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2
+  t[n - 1] = m[n - 2]
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], k = a * a + b * b
+    if (k > 9) { const tau = 3 / Math.sqrt(k); t[i] = tau * a * m[i]; t[i + 1] = tau * b * m[i] }
+  }
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3
+    d += ` C${(pts[i][0] + h).toFixed(1)} ${(pts[i][1] + t[i] * h).toFixed(1)} ${(pts[i + 1][0] - h).toFixed(1)} ${(pts[i + 1][1] - t[i + 1] * h).toFixed(1)} ${pts[i + 1][0].toFixed(1)} ${pts[i + 1][1].toFixed(1)}`
+  }
+  return d
+}
+
+/* Trend line. Drawn at its real pixel size (no stretching), with a hover readout of each day. */
+function Spark({ data, color = '#2f7bff', labels = [], format = String }) {
   const id = useId()
-  const w = 160, h = 44
-  const max = Math.max(1, ...data)
-  const step = w / Math.max(1, data.length - 1)
-  const pts = data.map((v, i) => [i * step, h - 5 - (v / max) * (h - 12)])
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+  const box = useRef(null)
+  const [w, setW] = useState(220)
+  const [hover, setHover] = useState(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const measure = () => setW(Math.max(80, Math.round(el.clientWidth)))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const h = 52, padX = 5, padTop = 10, padBottom = 8
+  const n = data.length
+  const max = Math.max(0, ...data)
+  const flat = max === 0
+  const x = (i) => padX + (i * (w - padX * 2)) / Math.max(1, n - 1)
+  const y = (v) => (flat ? h - padBottom : h - padBottom - (v / max) * (h - padTop - padBottom))
+  const pts = data.map((v, i) => [x(i), y(v)])
+  const line = monotone(pts)
+  const area = `${line} L${x(n - 1).toFixed(1)} ${h} L${x(0).toFixed(1)} ${h} Z`
+  const last = pts[n - 1]
+  const onMove = (e) => {
+    const r = box.current.getBoundingClientRect()
+    setHover(Math.min(n - 1, Math.max(0, Math.round(((e.clientX - r.left - padX) / (w - padX * 2)) * (n - 1)))))
+  }
+  const tipLeft = hover == null ? 0 : Math.min(w - 70, Math.max(0, x(hover) - 35))
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-11 w-full" aria-hidden="true">
-      <defs><linearGradient id={id} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".35" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
-      <motion.path d={`${line} L${w} ${h} L0 ${h} Z`} fill={`url(#${id})`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.3 }} />
-      <motion.path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-        initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease }} />
-      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="3" fill={color} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div ref={box} className="relative w-full" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block overflow-visible" aria-hidden="true">
+        <defs><linearGradient id={id} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".32" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
+        {flat ? (
+          <line x1={padX} x2={w - padX} y1={h - padBottom} y2={h - padBottom} stroke={color} strokeOpacity=".35" strokeWidth="2" strokeLinecap="round" strokeDasharray="1 7" />
+        ) : (
+          <>
+            <motion.path d={area} fill={`url(#${id})`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9, delay: 0.25 }} />
+            <motion.path d={line} fill="none" stroke={color} strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease }} />
+            <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>
+              <circle cx={last[0]} cy={last[1]} r="7" fill={color} opacity=".18" />
+              <circle cx={last[0]} cy={last[1]} r="3.25" fill={color} />
+            </motion.g>
+          </>
+        )}
+        {hover != null && (
+          <g>
+            <line x1={pts[hover][0]} x2={pts[hover][0]} y1="2" y2={h} stroke="#fff" strokeOpacity=".18" />
+            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="4" fill="#0a0b22" stroke={color} strokeWidth="2" />
+          </g>
+        )}
+      </svg>
+      {hover != null && (
+        <div className="pointer-events-none absolute -top-8 z-10 whitespace-nowrap rounded-lg border border-white/15 bg-[#0d0f2b] px-2.5 py-1 text-[11px] font-semibold shadow-xl" style={{ left: tipLeft }}>
+          <span className="text-snow/55">{labels[hover] ? parse(labels[hover]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}</span> {format(data[hover])}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -152,14 +220,14 @@ function TrackingStrip({ timer }) {
 }
 
 /* ---------------- KPI card ---------------- */
-function Kpi({ title, value, format, delta, spark, color, foot, goodWhenUp, onClick, loading }) {
+function Kpi({ title, value, format, delta, spark, labels, color, foot, goodWhenUp, onClick, loading }) {
   return (
     <motion.button variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }} whileHover={{ y: -3 }} onClick={onClick}
       className={`${card} group relative overflow-hidden p-5 text-left transition-colors hover:border-white/30`}>
       <p className={lbl}>{title}</p>
       {loading ? <Skel className="mt-3 h-10 w-24" /> : <p className="mt-2 text-4xl font-bold tracking-[-0.04em]"><Num value={value} format={format} /></p>}
       <div className="mt-2 min-h-5">{loading ? <Skel className="h-4 w-32" /> : delta ? <Delta {...delta} goodWhenUp={goodWhenUp} /> : <span className="text-xs text-snow/45">{foot}</span>}</div>
-      <div className="mt-3 -mb-1 opacity-90">{loading ? <Skel className="h-11" /> : <Spark data={spark} color={color} />}</div>
+      <div className="mt-4">{loading ? <Skel className="h-[52px]" /> : <Spark data={spark} color={color} labels={labels} format={format} />}</div>
       {!loading && foot && delta && <p className="mt-2 text-xs text-snow/45">{foot}</p>}
     </motion.button>
   )
@@ -248,7 +316,7 @@ export default function Today({ user, navigate, isSuper }) {
 
     return {
       newLeads: data.leads.filter((l) => l.status === 'new').length,
-      overdueList, dueTodayList, inProgressList, upcomingList, attention: overdueList.length + dueTodayList.length, overdue: overdueList.length,
+      days, overdueList, dueTodayList, inProgressList, upcomingList, attention: overdueList.length + dueTodayList.length, overdue: overdueList.length,
       myOpen: mine.length, today: all.get(today())?.total || 0, week, weekTotal, lastWeekSame, all,
       visits, visits7: sum(visits, 7, 14), visitsPrev: sum(visits, 0, 7),
       enquiries, enq7: sum(enquiries, 7, 14), enqPrev: sum(enquiries, 0, 7),
@@ -283,10 +351,10 @@ export default function Today({ user, navigate, isSuper }) {
       {error && <div className="xl:col-span-12"><ErrorNote error={error} /></div>}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 xl:col-span-12 xl:grid-cols-4">
-        <Kpi title="Visits, 7 days" loading={loading} value={m?.visits7 || 0} spark={m?.visits || [0, 0]} color="#2f7bff" delta={m && { cur: m.visits7, prev: m.visitsPrev }} foot="Website sessions" onClick={() => navigate('#/analytics')} />
-        <Kpi title="Enquiries, 7 days" loading={loading} value={m?.enq7 || 0} spark={m?.enquiries || [0, 0]} color="#f03aae" delta={m && { cur: m.enq7, prev: m.enqPrev }} foot={m ? `${m.newLeads} still new` : ''} onClick={() => navigate('#/enquiries')} />
-        <Kpi title="Time this week" loading={loading} value={m?.weekTotal || 0} format={fmtMin} spark={m?.timeSpark || [0, 0]} color="#8a4fd8" delta={m && { cur: m.weekTotal, prev: m.lastWeekSame, suffix: 'vs last week' }} foot="Your logged time" onClick={() => navigate('#/insights')} />
-        <Kpi title="Tasks completed, 7 days" loading={loading} value={m?.done7 || 0} spark={m?.done || [0, 0]} color="#34d399" delta={m && { cur: m.done7, prev: m.donePrev }} foot={m ? `${m.myOpen} open on your list` : ''} onClick={() => navigate('#/projects')} />
+        <Kpi title="Visits, 7 days" loading={loading} value={m?.visits7 || 0} spark={m?.visits || [0, 0]} labels={m?.days} color="#2f7bff" delta={m && { cur: m.visits7, prev: m.visitsPrev }} foot="Website sessions" onClick={() => navigate('#/analytics')} />
+        <Kpi title="Enquiries, 7 days" loading={loading} value={m?.enq7 || 0} spark={m?.enquiries || [0, 0]} labels={m?.days} color="#f03aae" delta={m && { cur: m.enq7, prev: m.enqPrev }} foot={m ? `${m.newLeads} still new` : ''} onClick={() => navigate('#/enquiries')} />
+        <Kpi title="Time this week" loading={loading} value={m?.weekTotal || 0} format={fmtMin} spark={m?.timeSpark || [0, 0]} labels={m?.days} color="#8a4fd8" delta={m && { cur: m.weekTotal, prev: m.lastWeekSame, suffix: 'vs last week' }} foot="Your logged time" onClick={() => navigate('#/insights')} />
+        <Kpi title="Tasks completed, 7 days" loading={loading} value={m?.done7 || 0} spark={m?.done || [0, 0]} labels={m?.days} color="#34d399" delta={m && { cur: m.done7, prev: m.donePrev }} foot={m ? `${m.myOpen} open on your list` : ''} onClick={() => navigate('#/projects')} />
       </div>
 
       <Panel className="xl:col-span-7" title="Your focus" sub="Assigned to you, most urgent first"

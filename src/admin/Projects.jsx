@@ -105,6 +105,7 @@ function TaskModal({ task, defaults = {}, projects, onClose, onSaved, onDeleted 
           </label>
           <label className={label}>Tags<input name="tags" defaultValue={(v.tags || []).join(', ')} placeholder="design, content" className={`${field} mt-2 normal-case tracking-normal`} /></label>
         </div>
+        {task?.created_by_email && <p className="text-xs text-snow/45">Created by {task.created_by_email} on {fmtDate(task.created_at.slice(0, 10))}</p>}
         <ErrorNote error={error} />
         <div className="mt-2 flex items-center justify-between gap-3">
           {task ? <button type="button" onClick={remove} className="text-sm text-pink hover:underline">Delete task</button> : <span />}
@@ -128,6 +129,7 @@ function TaskCard({ t, onOpen, draggable }) {
         {t.due_date && <span className={`rounded-full px-2.5 py-1 text-xs ${isOverdue(t) ? 'bg-pink/20 text-pink' : 'bg-white/10 text-snow/65'}`}>Due {fmtDate(t.due_date)}</span>}
         {t.tags?.map((g) => <span key={g} className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-snow/65">{g}</span>)}
       </div>
+      {t.created_by_email && <p className="mt-3 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
     </div>
   )
 }
@@ -166,6 +168,7 @@ function TaskList({ tasks, onMove, onOpen }) {
           <button onClick={() => onOpen(t)} className={`min-w-40 flex-1 text-left font-semibold ${t.status === 'done' ? 'text-snow/45 line-through' : ''}`}>{t.title}</button>
           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${PRIORITY[t.priority]}`}>{t.priority}</span>
           {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>Due {fmtDate(t.due_date)}</span>}
+          {t.created_by_email && <span className="hidden max-w-[220px] truncate text-xs text-snow/40 lg:inline" title={t.created_by_email}>by {t.created_by_email}</span>}
           <select value={t.status} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Status" className="rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-sm">
             {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
           </select>
@@ -229,6 +232,7 @@ export function ProjectDetail({ id, navigate }) {
               <p className="mt-1 text-sm text-snow/55">
                 {overdueDays > 0 ? <span className="text-pink">Overdue {fmtDate(project.due_date)}</span> : project.due_date ? `Due ${fmtDate(project.due_date)}` : 'No due date'} · {count('done')} / {tasks.length} tasks done
               </p>
+              {project.created_by_email && <p className="mt-1 text-xs text-snow/45">Created by {project.created_by_email} on {fmtDate(project.created_at.slice(0, 10))}</p>}
               {project.description && <p className="mt-3 max-w-xl text-snow/75">{project.description}</p>}
             </div>
           </div>
@@ -326,7 +330,7 @@ export function Projects({ navigate, openNew }) {
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {shown.map((p) => {
             const pt = tasks.filter((t) => t.project_id === p.id)
             const pct = pctDone(pt)
@@ -340,6 +344,7 @@ export function Projects({ navigate, openNew }) {
                 <h3 className="mt-5 text-2xl font-bold tracking-[-0.03em]">{p.name}</h3>
                 <Bar pct={pct} className="mt-6" />
                 <p className="mt-3 flex justify-between text-xs text-snow/55"><span>{pt.length ? (pct === 100 ? 'All tasks done' : `${pt.filter((t) => t.status !== 'done').length} open`) : 'No tasks yet'}</span><span>{pt.filter((t) => t.status === 'done').length}/{pt.length}</span></p>
+                {p.created_by_email && <p className="mt-4 truncate border-t border-white/10 pt-3 text-xs text-snow/45" title={p.created_by_email}>Created by {p.created_by_email}</p>}
               </button>
             )
           })}

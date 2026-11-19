@@ -48,6 +48,10 @@ create table if not exists public.tasks (
 );
 create index if not exists tasks_project_idx on public.tasks (project_id);
 
+-- Who created each project and task. Filled automatically from the signed-in user's email.
+alter table public.projects add column if not exists created_by_email text default (auth.jwt() ->> 'email');
+alter table public.tasks    add column if not exists created_by_email text default (auth.jwt() ->> 'email');
+
 -- Privacy-friendly analytics: no cookies, no IP addresses, no personal data.
 create table if not exists public.analytics_events (
   id          uuid primary key default gen_random_uuid(),

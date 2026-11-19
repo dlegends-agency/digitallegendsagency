@@ -115,7 +115,7 @@ function Dashboard({ session }) {
         <button onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open} className="grid h-10 w-10 place-items-center rounded-full glass"><Icon name={open ? 'x' : 'menu'} /></button>
       </div>
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/10 bg-[#070819] p-4 transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/10 bg-[#070819] p-4 overflow-x-hidden overflow-y-auto transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="hidden items-center px-2 pb-4 pt-2 lg:flex"><img src="/img/logo.webp" alt="Digital Legends Agency" className="h-9 w-auto" /></div>
         <div className="relative">
           <button onClick={() => setNewMenu(!newMenu)} className="pill-white flex w-full items-center gap-3 rounded-xl px-4 py-3 text-[15px] font-semibold"><Icon name="plus" />New</button>
@@ -134,18 +134,18 @@ function Dashboard({ session }) {
           {siteNav.map((n) => <Item key={n.to} {...n} badge={n.to === 'enquiries' ? newCount : 0} />)}
         </nav>
 
-        <div className="mt-auto grid gap-3 pt-6">
+        <div className="mt-auto flex min-w-0 flex-col gap-3 pt-6">
           <a href="/" target="_blank" rel="noreferrer" className="flex items-center gap-3 px-3 text-sm text-snow/60 hover:text-snow"><Icon name="external" className="h-4 w-4" />View site</a>
-          <div className="flex items-center gap-3 rounded-xl border border-white/10 p-3">
+          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 p-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky to-pink text-sm font-bold">{session.user.email[0].toUpperCase()}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-snow/65">{session.user.email}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-snow/65" title={session.user.email}>{session.user.email}</span>
             <button onClick={() => supabase.auth.signOut()} aria-label="Sign out" title="Sign out" className="text-snow/55 hover:text-snow"><Icon name="logout" className="h-5 w-5" /></button>
           </div>
         </div>
       </aside>
       {open && <button aria-label="Close menu" onClick={() => setOpen(false)} className="fixed inset-0 z-40 bg-black/60 lg:hidden" />}
 
-      <main className="mx-auto w-full max-w-[1280px] px-4 py-8 md:px-8 md:py-10">{page}</main>
+      <main className="w-full px-4 py-8 md:px-10 md:py-10">{page}</main>
     </div>
   )
 }

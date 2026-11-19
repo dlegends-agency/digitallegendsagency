@@ -7,6 +7,7 @@ import {
 } from './ui'
 import { useCategories, useTeam, COLORS, COLOR_NAMES } from './data'
 import TaskDetail from './TaskDetail'
+import { TimerButton } from './timer'
 
 const pctDone = (tasks) => (tasks.length ? Math.round((tasks.filter((t) => t.status === 'done').length / tasks.length) * 100) : 0)
 
@@ -211,7 +212,7 @@ function TaskCard({ t, who, counts, onOpen, onDrag, onDrop }) {
       <div className="mt-3 flex items-center gap-3 text-xs text-snow/50">
         {counts?.total > 0 && <span className={`flex items-center gap-1 ${counts.done === counts.total ? 'text-emerald-300' : ''}`}><Icon name="check" className="h-3.5 w-3.5" />{counts.done}/{counts.total}</span>}
         {counts?.comments > 0 && <span className="flex items-center gap-1"><Icon name="comment" className="h-3.5 w-3.5" />{counts.comments}</span>}
-        <span className="ml-auto"><Avatar person={who} /></span>
+        <span className="ml-auto flex items-center gap-2"><TimerButton task={t} /><Avatar person={who} /></span>
       </div>
       {t.created_by_email && <p className="mt-2 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
     </motion.div>
@@ -264,6 +265,7 @@ function TaskList({ tasks, whoOf, counts, onMove, onOpen }) {
             {c?.comments > 0 && <span className="flex items-center gap-1 text-xs text-snow/50"><Icon name="comment" className="h-3.5 w-3.5" />{c.comments}</span>}
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${PRIORITY[t.priority]}`}>{t.priority}</span>
             {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>Due {fmtDate(t.due_date)}</span>}
+            <TimerButton task={t} />
             <Avatar person={whoOf(t)} />
             <select value={t.status} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Status" className="rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-sm">
               {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}

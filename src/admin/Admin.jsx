@@ -12,6 +12,7 @@ import Account from './Account'
 import Users from './Users'
 import Blog from './Blog'
 import Insights from './Insights'
+import { TimerProvider } from './timer'
 
 function useNoIndex() {
   useEffect(() => {
@@ -221,5 +222,5 @@ export default function Admin() {
       </div>
     )
   }
-  return <Dashboard session={session} role={role} />
+  return <TimerProvider me={session.user}><Dashboard session={session} role={role} /></TimerProvider>
 }

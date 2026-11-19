@@ -21,7 +21,11 @@ export default function QuickLog() {
     const { data, error } = await fetchEntries(addDays(today(), -90))
     if (error) setError(needsSetup(error.message) ? setupMessage : error.message); else setEntries(data)
   }, [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    window.addEventListener('dl:time-changed', load)
+    return () => window.removeEventListener('dl:time-changed', load)
+  }, [load])
   useEffect(() => { if (!cat && cats.categories.length) setCat(cats.categories[0].name) }, [cats.categories, cat])
 
   const colorOf = (name) => COLORS[cats.categories.find((c) => c.name === name)?.color] || 'bg-snow/50'

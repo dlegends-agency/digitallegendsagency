@@ -90,6 +90,18 @@ create table if not exists public.time_entries (
 alter table public.time_entries add column if not exists user_id uuid default auth.uid();
 alter table public.time_entries add column if not exists user_email text default (auth.jwt() ->> 'email');
 create index if not exists time_entries_user_idx on public.time_entries (user_id, entry_date desc);
+-- Which task the time was spent on (set when you use the task timer).
+alter table public.time_entries add column if not exists task_id uuid references public.tasks (id) on delete set null;
+create index if not exists time_entries_task_idx on public.time_entries (task_id);
+
+-- A running task timer. One per person: starting a new one logs the old one first.
+create table if not exists public.timers (
+  user_id    uuid primary key default auth.uid(),
+  task_id    uuid not null references public.tasks (id) on delete cascade,
+  task_title text not null check (char_length(task_title) <= 300),
+  category   text check (char_length(category) <= 60),
+  started_at timestamptz not null default now()
+);
 
 -- Blog posts. Written in Markdown. Visitors can read published posts only.
 create table if not exists public.blog_posts (
@@ -201,6 +213,7 @@ grant select (id, created_at, updated_at, published_at, status, title, slug, exc
   on public.blog_posts to anon;
 grant select, insert, update, delete on public.blog_posts       to authenticated;
 grant select, insert, update, delete on public.time_entries     to authenticated;
+grant select, insert, update, delete on public.timers           to authenticated;
 
 -- ============================================================
 -- Row-level security
@@ -217,6 +230,7 @@ alter table public.task_checklist_items enable row level security;
 alter table public.task_comments    enable row level security;
 alter table public.blog_posts       enable row level security;
 alter table public.time_entries     enable row level security;
+alter table public.timers           enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -336,6 +350,29 @@ create policy "own time entries" on public.time_entries
   for all to authenticated
   using (public.is_admin() and user_id = auth.uid())
   with check (public.is_admin() and user_id = auth.uid());
+
+-- timers: you can see and change only your own running timer.
+drop policy if exists "own timer" on public.timers;
+create policy "own timer" on public.timers
+  for all to authenticated
+  using (public.is_admin() and user_id = auth.uid())
+  with check (public.is_admin() and user_id = auth.uid());
+
+-- Total minutes tracked on tasks by everyone. Totals only: other people's entries stay private.
+create or replace function public.task_time(task_ids uuid[])
+returns table (task_id uuid, minutes bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select t.task_id, sum(t.minutes)::bigint
+  from public.time_entries t
+  where t.task_id = any(task_ids) and public.is_admin()
+  group by t.task_id;
+$$;
+revoke all on function public.task_time(uuid[]) from public, anon;
+grant execute on function public.task_time(uuid[]) to authenticated;
 
 -- blog: the public reads published posts; any admin reads everything and manages posts.
 drop policy if exists "public read published posts" on public.blog_posts;

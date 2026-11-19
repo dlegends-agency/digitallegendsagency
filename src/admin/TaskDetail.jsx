@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import { TimerButton } from './timer'
+import { fmtMin } from './time'
 import { field, STATUSES, statusDot, Bar, Icon, Avatar, ErrorNote, fmtDate, fmtDateTime, isOverdue } from './ui'
 
 const lbl = 'block text-xs font-semibold uppercase tracking-[0.16em] text-snow/45'
@@ -26,6 +28,7 @@ export default function TaskDetail({ task, projects, team, me, isSuper, onClose,
   const [items, setItems] = useState(null)
   const [comments, setComments] = useState(null)
   const [setupError, setSetupError] = useState('')
+  const [tracked, setTracked] = useState(null)
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
@@ -42,6 +45,13 @@ export default function TaskDetail({ task, projects, team, me, isSuper, onClose,
       if (c.error || m.error) setSetupError(friendly((c.error || m.error).message))
       setItems(c.data || []); setComments(m.data || [])
     })
+  }, [task.id])
+
+  useEffect(() => {
+    const load = () => supabase.rpc('task_time', { task_ids: [task.id] }).then(({ data, error }) => { if (!error) setTracked(Number(data?.[0]?.minutes || 0)) })
+    load()
+    window.addEventListener('dl:time-changed', load)
+    return () => window.removeEventListener('dl:time-changed', load)
   }, [task.id])
 
   const report = (list = items, cm = comments) => onCounts?.(task.id, { done: list.filter((i) => i.done).length, total: list.length, comments: cm.length })
@@ -215,6 +225,10 @@ export default function TaskDetail({ task, projects, team, me, isSuper, onClose,
                 </select>
               </div>
               {t.assignee_id !== me.id && <button onClick={() => assign(me.id)} className="mt-2 text-xs text-snow/55 underline decoration-white/20 underline-offset-4 hover:text-snow">Assign to me</button>}
+            </Prop>
+            <Prop name="Time tracking">
+              <div className="mt-2"><TimerButton task={t} full /></div>
+              {tracked !== null && <p className="mt-2 text-xs text-snow/50">{tracked ? `${fmtMin(tracked)} tracked on this task by the team` : 'No time tracked yet'}</p>}
             </Prop>
             <Prop name="Priority">
               <select value={t.priority} onChange={(e) => save({ priority: e.target.value })} className={`${ctl} capitalize`}>{['high', 'medium', 'low'].map((p) => <option key={p} value={p} className="bg-ink capitalize">{p}</option>)}</select>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import QuickLog from './QuickLog'
+import { TimerButton } from './timer'
 import { card, fmtDate, fmtDateTime, isOverdue, dayKey, statusLabel, statusDot, Bar, ErrorNote, Icon } from './ui'
 
 const lbl = 'text-xs font-semibold uppercase tracking-[0.16em] text-snow/45'
@@ -93,6 +94,7 @@ export default function Today({ user, navigate }) {
                   <span className="block truncate font-semibold">{t.title}</span>
                   <span className="block truncate text-xs text-snow/50">{t.projects?.name || 'Quick task'}</span>
                 </button>
+                <TimerButton task={t} />
                 <span className="hidden items-center gap-1.5 text-xs text-snow/60 sm:flex"><span className={`h-2 w-2 rounded-full ${statusDot[t.status]}`} />{statusLabel[t.status]}</span>
                 {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>{fmtDate(t.due_date)}</span>}
               </li>

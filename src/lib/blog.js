@@ -49,7 +49,36 @@ export function useMeta({ title, description, image, type = 'website' }) {
     set('property', 'og:description', description)
     set('property', 'og:image', image)
     set('property', 'og:type', type)
+    set('property', 'og:url', location.origin + location.pathname)
+    let canon = document.head.querySelector('link[rel="canonical"]')
+    if (!canon) { canon = document.createElement('link'); canon.rel = 'canonical'; document.head.appendChild(canon); made.push(canon) }
+    canon.href = location.origin + location.pathname
     set('name', 'twitter:card', image ? 'summary_large_image' : 'summary')
     return () => { document.title = prevTitle; made.forEach((m) => m.remove()) }
   }, [title, description, image, type])
+}
+
+/* Adds schema.org Article data for search engines while an article is shown. */
+export function useArticleSchema(post) {
+  useEffect(() => {
+    if (!post) return
+    const abs = (u) => (/^https?:/i.test(u) ? u : location.origin + u)
+    const data = {
+      '@context': 'https://schema.org', '@type': 'Article', headline: post.title,
+      description: post.seo_description || post.excerpt || '',
+      ...(post.cover_image && { image: [abs(post.cover_image)] }),
+      datePublished: post.published_at, dateModified: post.updated_at || post.published_at,
+      author: { '@type': 'Person', name: post.author_name || 'Digital Legends Team' },
+      publisher: { '@type': 'Organization', name: 'Digital Legends Agency', logo: { '@type': 'ImageObject', url: `${location.origin}/img/logo.webp` } },
+      mainEntityOfPage: location.origin + location.pathname,
+      ...(post.category && { articleSection: post.category }),
+    }
+    // the server already adds this for crawlers; keep a single copy
+    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((n) => n.remove())
+    const el = document.createElement('script')
+    el.type = 'application/ld+json'
+    el.textContent = JSON.stringify(data)
+    document.head.appendChild(el)
+    return () => el.remove()
+  }, [post])
 }

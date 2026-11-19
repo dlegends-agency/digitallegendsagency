@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getPublished, listPublished, renderMarkdown, readingMinutes, fmtLong, useMeta } from '../lib/blog'
+import { getPublished, listPublished, renderMarkdown, readingMinutes, fmtLong, useMeta, useArticleSchema } from '../lib/blog'
 import { startTracking } from '../lib/track'
 import { wrap, Nav, Footer } from '../components/chrome'
 import BlogCard from './BlogCard'
@@ -17,8 +17,9 @@ export default function BlogPost({ slug }) {
   useMeta({
     title: post ? `${post.title} | Digital Legends Agency` : 'Blog | Digital Legends Agency',
     description: post ? (post.seo_description || post.excerpt || '') : '',
-    image: post?.cover_image, type: post ? 'article' : 'website',
+    image: post?.cover_image ? (/^https?:/i.test(post.cover_image) ? post.cover_image : location.origin + post.cover_image) : undefined, type: post ? 'article' : 'website',
   })
+  useArticleSchema(post)
   const html = useMemo(() => renderMarkdown(post?.content), [post])
 
   return (
@@ -53,7 +54,7 @@ export default function BlogPost({ slug }) {
               {post.cover_image && (
                 <div className={`${wrap} mt-12`}>
                   <div className="mx-auto aspect-[16/8] max-w-5xl overflow-hidden rounded-[2rem] border border-white/10">
-                    <img src={post.cover_image} alt="" className="h-full w-full object-cover" />
+                    <img src={post.cover_image} alt={post.title} className="h-full w-full object-cover" />
                   </div>
                 </div>
               )}

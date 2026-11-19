@@ -48,3 +48,5 @@ body {
 .prose-blog table { width: 100%; border-collapse: collapse; font-size: .95em; }
 .prose-blog th, .prose-blog td { border: 1px solid rgba(255,255,255,.12); padding: .6em .8em; text-align: left; }
 .prose-blog th { color: #f5f5f7; background: rgba(255,255,255,.04); }
+.prose-blog li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.4em; }
+.prose-blog input[type="checkbox"] { margin-right: .6em; accent-color: #f03aae; transform: translateY(1px); }

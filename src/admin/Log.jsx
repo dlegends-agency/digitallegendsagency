@@ -3,10 +3,10 @@ import { supabase } from '../lib/supabase'
 import { field, btnGhost, card, todayStr, dayKey, Icon, ErrorNote, PageHeader } from './ui'
 
 const PAGE = 100
-const ENTITIES = [['all', 'Everything'], ['project', 'Projects'], ['task', 'Tasks'], ['enquiry', 'Enquiries'], ['content', 'Site content'], ['user', 'Users']]
+const ENTITIES = [['all', 'Everything'], ['project', 'Projects'], ['task', 'Tasks'], ['enquiry', 'Enquiries'], ['content', 'Site content'], ['blog', 'Blog'], ['user', 'Users']]
 const entityStyle = {
   project: 'bg-sky/20 text-sky', task: 'bg-violet/25 text-violet', enquiry: 'bg-pink/20 text-pink',
-  content: 'bg-white/10 text-snow/70', user: 'bg-amber-400/20 text-amber-300',
+  content: 'bg-white/10 text-snow/70', user: 'bg-amber-400/20 text-amber-300', blog: 'bg-emerald-400/20 text-emerald-300',
 }
 const actionIcon = { created: 'plus', updated: 'pencil', moved: 'refresh', deleted: 'trash', assigned: 'users', commented: 'comment' }
 const actionColor = { created: 'text-emerald-300', updated: 'text-sky', moved: 'text-violet', deleted: 'text-pink', assigned: 'text-amber-300', commented: 'text-sky' }

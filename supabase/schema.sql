@@ -76,6 +76,45 @@ insert into public.categories (name, color) values
   ('Website', 'sky'), ('Client', 'violet'), ('Marketing', 'pink'), ('Internal', 'amber'), ('Product', 'emerald')
 on conflict (name) do nothing;
 
+-- Blog posts. Written in Markdown. Visitors can read published posts only.
+create table if not exists public.blog_posts (
+  id              uuid primary key default gen_random_uuid(),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  published_at    timestamptz,
+  status          text not null default 'draft' check (status in ('draft', 'published')),
+  title           text not null check (char_length(title) between 1 and 200),
+  slug            text not null unique check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(slug) <= 120),
+  excerpt         text check (char_length(excerpt) <= 400),
+  content         text not null default '' check (char_length(content) <= 200000),
+  cover_image     text check (char_length(cover_image) <= 1000),
+  category        text check (char_length(category) <= 60),
+  tags            text[] not null default '{}',
+  seo_description text check (char_length(seo_description) <= 200),
+  author_name     text check (char_length(author_name) <= 100),
+  author_email    text default (auth.jwt() ->> 'email')
+);
+create index if not exists blog_posts_published_idx on public.blog_posts (status, published_at desc);
+
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists blog_posts_touch on public.blog_posts;
+create trigger blog_posts_touch before update on public.blog_posts
+  for each row execute function public.touch_updated_at();
+
+-- Public storage bucket for blog images (5 MB, images only). Only admins can upload.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('blog-images', 'blog-images', true, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'])
+on conflict (id) do update
+  set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
 -- Checklist items and comments on a task.
 create table if not exists public.task_checklist_items (
   id         uuid primary key default gen_random_uuid(),
@@ -142,6 +181,10 @@ grant select                         on public.activity_log     to authenticated
 grant select, insert, update, delete on public.categories       to authenticated;
 grant select, insert, update, delete on public.task_checklist_items to authenticated;
 grant select, insert, delete         on public.task_comments    to authenticated;
+-- Visitors may read these columns of published posts only (author_email stays private).
+grant select (id, created_at, updated_at, published_at, status, title, slug, excerpt, content, cover_image, category, tags, seo_description, author_name)
+  on public.blog_posts to anon;
+grant select, insert, update, delete on public.blog_posts       to authenticated;
 
 -- ============================================================
 -- Row-level security
@@ -156,6 +199,7 @@ alter table public.activity_log     enable row level security;
 alter table public.categories       enable row level security;
 alter table public.task_checklist_items enable row level security;
 alter table public.task_comments    enable row level security;
+alter table public.blog_posts       enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -267,6 +311,44 @@ drop policy if exists "delete own comments" on public.task_comments;
 create policy "delete own comments" on public.task_comments
   for delete to authenticated using (public.is_admin() and (author_id = auth.uid() or public.is_super_admin()));
 
+-- blog: the public reads published posts; any admin reads everything and manages posts.
+drop policy if exists "public read published posts" on public.blog_posts;
+create policy "public read published posts" on public.blog_posts
+  for select to anon, authenticated using (status = 'published' and published_at <= now());
+
+drop policy if exists "admins read all posts" on public.blog_posts;
+create policy "admins read all posts" on public.blog_posts
+  for select to authenticated using (public.is_admin());
+
+drop policy if exists "admins insert posts" on public.blog_posts;
+create policy "admins insert posts" on public.blog_posts
+  for insert to authenticated with check (public.is_admin());
+
+drop policy if exists "admins update posts" on public.blog_posts;
+create policy "admins update posts" on public.blog_posts
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "admins delete posts" on public.blog_posts;
+create policy "admins delete posts" on public.blog_posts
+  for delete to authenticated using (public.is_admin());
+
+-- blog images in storage: anyone can read, only admins can upload, replace or delete.
+drop policy if exists "public read blog images" on storage.objects;
+create policy "public read blog images" on storage.objects
+  for select to anon, authenticated using (bucket_id = 'blog-images');
+
+drop policy if exists "admins upload blog images" on storage.objects;
+create policy "admins upload blog images" on storage.objects
+  for insert to authenticated with check (bucket_id = 'blog-images' and public.is_admin());
+
+drop policy if exists "admins update blog images" on storage.objects;
+create policy "admins update blog images" on storage.objects
+  for update to authenticated using (bucket_id = 'blog-images' and public.is_admin());
+
+drop policy if exists "admins delete blog images" on storage.objects;
+create policy "admins delete blog images" on storage.objects
+  for delete to authenticated using (bucket_id = 'blog-images' and public.is_admin());
+
 -- The people a task can be assigned to. Any admin may list the team (not just the super admin).
 create or replace function public.list_team()
 returns table (user_id uuid, email text, full_name text, role text)
@@ -327,6 +409,18 @@ begin
       elsif old.note is distinct from new.note then act := 'updated'; msg := 'Edited the note on the enquiry from ' || new.name;
       else return null; end if;
     else act := 'deleted'; msg := 'Deleted enquiry from ' || old.name; end if;
+  elsif ent = 'blog' then
+    if tg_op = 'INSERT' then
+      act := 'created';
+      msg := 'Created blog post "' || new.title || '"' || case when new.status = 'published' then ' (published)' else '' end;
+    elsif tg_op = 'UPDATE' then
+      act := 'updated';
+      if old.status is distinct from new.status then
+        msg := case when new.status = 'published' then 'Published blog post "' else 'Unpublished blog post "' end || new.title || '"';
+      else
+        msg := 'Edited blog post "' || new.title || '"';
+      end if;
+    else act := 'deleted'; msg := 'Deleted blog post "' || old.title || '"'; end if;
   elsif ent = 'content' then
     if tg_op = 'DELETE' then act := 'deleted'; msg := 'Reset site content "' || old.key || '" to the default';
     else act := 'updated'; msg := 'Edited site content "' || new.key || '"'; end if;
@@ -349,6 +443,10 @@ create trigger log_tasks after insert or update or delete on public.tasks
 drop trigger if exists log_comments on public.task_comments;
 create trigger log_comments after insert on public.task_comments
   for each row execute function public.log_activity('comment');
+
+drop trigger if exists log_blog on public.blog_posts;
+create trigger log_blog after insert or update or delete on public.blog_posts
+  for each row execute function public.log_activity('blog');
 
 drop trigger if exists log_leads on public.leads;
 create trigger log_leads after insert or update or delete on public.leads

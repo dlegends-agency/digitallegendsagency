@@ -4,16 +4,17 @@ import './index.css'
 import App from './App.jsx'
 
 const Admin = lazy(() => import('./admin/Admin.jsx'))
-const isAdmin = window.location.pathname.replace(/\/+$/, '') === '/admin'
+const BlogIndex = lazy(() => import('./blog/BlogIndex.jsx'))
+const BlogPost = lazy(() => import('./blog/BlogPost.jsx'))
+
+const path = window.location.pathname.replace(/\/+$/, '') || '/'
+let page = <App />
+if (path === '/admin') page = <Admin />
+else if (path === '/blog') page = <BlogIndex />
+else if (path.startsWith('/blog/')) page = <BlogPost slug={decodeURIComponent(path.slice(6))} />
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {isAdmin ? (
-      <Suspense fallback={<div className="min-h-svh bg-ink" />}>
-        <Admin />
-      </Suspense>
-    ) : (
-      <App />
-    )}
+    <Suspense fallback={<div className="min-h-svh bg-ink" />}>{page}</Suspense>
   </StrictMode>,
 )

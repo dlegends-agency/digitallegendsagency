@@ -3,6 +3,7 @@ export const nav = [
   ['Services', '#services'],
   ['How we work', '#approach'],
   ['Principles', '#principles'],
+  ['Blog', '/blog'],
   ['Contact', '#contact'],
 ]
 

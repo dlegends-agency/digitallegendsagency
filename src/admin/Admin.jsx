@@ -10,6 +10,7 @@ import Content from './Content'
 import Log from './Log'
 import Account from './Account'
 import Users from './Users'
+import Blog from './Blog'
 
 function useNoIndex() {
   useEffect(() => {
@@ -78,6 +79,7 @@ const nav = [
 ]
 const siteNav = [
   { to: 'enquiries', label: 'Enquiries', icon: 'inbox' },
+  { to: 'blog', label: 'Blog', icon: 'pen' },
   { to: 'analytics', label: 'Analytics', icon: 'chart' },
   { to: 'content', label: 'Site content', icon: 'doc' },
 ]
@@ -122,6 +124,7 @@ function Dashboard({ session, role }) {
   else if (route === 'enquiries') page = <Enquiries onChanged={refreshBadge} />
   else if (route === 'analytics') page = <Analytics />
   else if (route === 'content') page = <Content />
+  else if (route === 'blog') page = <Blog seg={seg} navigate={navigate} me={session.user} key={seg[1] || 'list'} />
   else if (route === 'log') page = <Log />
   else if (route === 'account') page = <Account user={session.user} />
   else page = <Today user={session.user} navigate={navigate} />

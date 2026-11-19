@@ -25,6 +25,15 @@ alter table public.leads        enable row level security;
 alter table public.site_content enable row level security;
 alter table public.admins       enable row level security;
 
+-- Table privileges. Newer Supabase projects do not grant these automatically.
+-- Row-level security below still decides which rows each role can touch.
+grant usage on schema public to anon, authenticated;
+grant insert                         on public.leads        to anon;
+grant select, insert, update, delete on public.leads        to authenticated;
+grant select                         on public.site_content to anon;
+grant select, insert, update, delete on public.site_content to authenticated;
+grant select                         on public.admins       to authenticated;
+
 create or replace function public.is_admin()
 returns boolean
 language sql

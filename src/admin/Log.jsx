@@ -133,8 +133,8 @@ function TimeLog() {
 }
 
 /* ---------------- Activity ---------------- */
-const ENTITIES = [['all', 'All'], ['project', 'Projects'], ['task', 'Tasks'], ['enquiry', 'Enquiries'], ['content', 'Content']]
-const entityStyle = { project: 'bg-sky/20 text-sky', task: 'bg-violet/25 text-violet', enquiry: 'bg-pink/20 text-pink', content: 'bg-white/10 text-snow/70' }
+const ENTITIES = [['all', 'All'], ['project', 'Projects'], ['task', 'Tasks'], ['enquiry', 'Enquiries'], ['content', 'Content'], ['user', 'Users']]
+const entityStyle = { project: 'bg-sky/20 text-sky', task: 'bg-violet/25 text-violet', enquiry: 'bg-pink/20 text-pink', content: 'bg-white/10 text-snow/70', user: 'bg-amber-400/20 text-amber-300' }
 
 function Activity() {
   const [rows, setRows] = useState(null)

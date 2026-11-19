@@ -39,6 +39,7 @@ const paths = {
   pencil: <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />,
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.8a3.5 3.5 0 010 6.4M21.5 20c0-2.8-1.5-4.8-4-5.6" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>,
   refresh: <path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7" />,

@@ -25,6 +25,15 @@ create table if not exists public.admins (
   user_id uuid primary key references auth.users (id) on delete cascade
 );
 
+-- Roles: 'super_admin' (can see Log and Users, and grant access) or 'admin' (everything else).
+alter table public.admins add column if not exists role text not null default 'admin';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'admins_role_check') then
+    alter table public.admins add constraint admins_role_check check (role in ('admin', 'super_admin'));
+  end if;
+end $$;
+
 create table if not exists public.projects (
   id          uuid primary key default gen_random_uuid(),
   created_at  timestamptz not null default now(),
@@ -130,6 +139,16 @@ as $$
   select exists (select 1 from public.admins where user_id = auth.uid());
 $$;
 
+create or replace function public.is_super_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.admins where user_id = auth.uid() and role = 'super_admin');
+$$;
+
 -- leads: the public site may only INSERT a new lead. Only admins read or change them.
 drop policy if exists "public can submit leads" on public.leads;
 create policy "public can submit leads" on public.leads
@@ -192,15 +211,17 @@ drop policy if exists "admins delete events" on public.analytics_events;
 create policy "admins delete events" on public.analytics_events
   for delete to authenticated using (public.is_admin());
 
--- time log: admins only.
+-- time log: super admin only.
 drop policy if exists "admins manage time" on public.time_entries;
-create policy "admins manage time" on public.time_entries
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "super admin manages time" on public.time_entries;
+create policy "super admin manages time" on public.time_entries
+  for all to authenticated using (public.is_super_admin()) with check (public.is_super_admin());
 
--- activity log: admins can read. Rows are written only by the trigger function below.
+-- activity log: super admin can read. Rows are written only by the trigger function below.
 drop policy if exists "admins read activity" on public.activity_log;
-create policy "admins read activity" on public.activity_log
-  for select to authenticated using (public.is_admin());
+drop policy if exists "super admin reads activity" on public.activity_log;
+create policy "super admin reads activity" on public.activity_log
+  for select to authenticated using (public.is_super_admin());
 
 -- ============================================================
 -- Activity log triggers: record who created, moved, edited or deleted what.
@@ -263,11 +284,75 @@ drop trigger if exists log_content on public.site_content;
 create trigger log_content after insert or update or delete on public.site_content
   for each row execute function public.log_activity('content');
 
+-- ============================================================
+-- User management (super admin only). These run with elevated rights but check
+-- is_super_admin() first, so nobody else can use them.
+-- ============================================================
+create or replace function public.list_users()
+returns table (user_id uuid, email text, full_name text, role text, created_at timestamptz, last_sign_in_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select u.id,
+         u.email::text,
+         coalesce(u.raw_user_meta_data ->> 'full_name', ''),
+         coalesce(a.role, 'none'),
+         u.created_at,
+         u.last_sign_in_at
+  from auth.users u
+  left join public.admins a on a.user_id = u.id
+  where public.is_super_admin()
+  order by u.created_at;
+$$;
+
+create or replace function public.set_user_role(target uuid, new_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_email text;
+begin
+  if not public.is_super_admin() then
+    raise exception 'Only the super admin can change access';
+  end if;
+  if new_role not in ('admin', 'none') then
+    raise exception 'Invalid role';
+  end if;
+  if exists (select 1 from public.admins where user_id = target and role = 'super_admin') then
+    raise exception 'The super admin cannot be changed here';
+  end if;
+  select email into target_email from auth.users where id = target;
+  if target_email is null then
+    raise exception 'User not found';
+  end if;
+  if new_role = 'none' then
+    delete from public.admins where user_id = target;
+  else
+    insert into public.admins (user_id, role) values (target, 'admin')
+    on conflict (user_id) do update set role = 'admin';
+  end if;
+  insert into public.activity_log (actor_email, action, entity, summary)
+  values (auth.jwt() ->> 'email', 'updated', 'user',
+          case when new_role = 'admin' then 'Gave admin access to ' else 'Removed admin access from ' end || target_email);
+end;
+$$;
+
+revoke all on function public.list_users() from public, anon;
+revoke all on function public.set_user_role(uuid, text) from public, anon;
+grant execute on function public.list_users() to authenticated;
+grant execute on function public.set_user_role(uuid, text) to authenticated;
+
 -- ---------------------------------------------------------------
--- Make a user an admin (after creating them in Authentication > Users).
--- Replace the email and run this separately:
+-- Set up who can sign in to /admin (the people must already exist under
+-- Authentication > Users). Replace the emails and run this separately:
 --
--- insert into public.admins (user_id)
--- select id from auth.users where email = 'YOUR_ADMIN_EMAIL'
--- on conflict do nothing;
+-- insert into public.admins (user_id, role)
+-- select id, case when email = 'SUPER_ADMIN_EMAIL' then 'super_admin' else 'admin' end
+-- from auth.users
+-- where email in ('SUPER_ADMIN_EMAIL', 'ADMIN_EMAIL_1', 'ADMIN_EMAIL_2')
+-- on conflict (user_id) do update set role = excluded.role;
 -- ---------------------------------------------------------------

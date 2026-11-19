@@ -9,6 +9,7 @@ import Analytics from './Analytics'
 import Content from './Content'
 import Log from './Log'
 import Account from './Account'
+import Users from './Users'
 
 function useNoIndex() {
   useEffect(() => {
@@ -61,6 +62,15 @@ function Login() {
 }
 
 /* ---------------- Shell ---------------- */
+function Locked() {
+  return (
+    <div className="glass mx-auto mt-16 max-w-md rounded-3xl p-8 text-center">
+      <h1 className="text-2xl font-bold tracking-[-0.03em]">Super admin only</h1>
+      <p className="mt-3 text-snow/65">This page is only available to the super admin.</p>
+    </div>
+  )
+}
+
 const nav = [
   { to: 'today', label: 'Today', icon: 'sun' },
   { to: 'projects', label: 'Projects', icon: 'folder' },
@@ -72,7 +82,8 @@ const siteNav = [
   { to: 'content', label: 'Site content', icon: 'doc' },
 ]
 
-function Dashboard({ session }) {
+function Dashboard({ session, role }) {
+  const isSuper = role === 'super_admin'
   const [hash, navigate] = useHash()
   const [open, setOpen] = useState(false)
   const [newMenu, setNewMenu] = useState(false)
@@ -104,7 +115,9 @@ function Dashboard({ session }) {
   )
 
   let page
-  if (route === 'projects' && seg[1]) page = <ProjectDetail id={seg[1]} navigate={navigate} key={seg[1]} />
+  if (['log', 'users'].includes(route) && !isSuper) page = <Locked />
+  else if (route === 'users') page = <Users me={session.user} />
+  else if (route === 'projects' && seg[1]) page = <ProjectDetail id={seg[1]} navigate={navigate} key={seg[1]} />
   else if (route === 'projects') page = <Projects navigate={navigate} openNew={params.get('new')} key={hash} />
   else if (route === 'enquiries') page = <Enquiries onChanged={refreshBadge} />
   else if (route === 'analytics') page = <Analytics />
@@ -134,7 +147,7 @@ function Dashboard({ session }) {
         </div>
 
         <nav className="mt-5 grid gap-1" aria-label="Admin">
-          {nav.map((n) => <Item key={n.to} {...n} />)}
+          {[...nav.filter((n) => n.to !== 'log' || isSuper), ...(isSuper ? [{ to: 'users', label: 'Users', icon: 'users' }] : [])].map((n) => <Item key={n.to} {...n} />)}
           <p className="mb-1 mt-6 px-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-snow/35">Website</p>
           {siteNav.map((n) => <Item key={n.to} {...n} badge={n.to === 'enquiries' ? newCount : 0} />)}
         </nav>
@@ -147,6 +160,7 @@ function Dashboard({ session }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{session.user.user_metadata?.full_name || session.user.email.split('@')[0]}</span>
                 <span className="block truncate text-xs text-snow/55" title={session.user.email}>{session.user.email}</span>
+                <span className="block text-[11px] font-semibold text-pink">{isSuper ? 'Super admin' : 'Admin'}</span>
               </span>
             </button>
             <button onClick={() => go('account')} aria-label="Account settings" title="Account settings" className="text-snow/55 hover:text-snow"><Icon name="settings" className="h-5 w-5" /></button>
@@ -165,7 +179,7 @@ function Dashboard({ session }) {
 export default function Admin() {
   useNoIndex()
   const [session, setSession] = useState(undefined)
-  const [isAdmin, setIsAdmin] = useState(null)
+  const [role, setRole] = useState(null) // null = checking, 'none', 'admin' or 'super_admin'
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -174,24 +188,32 @@ export default function Admin() {
   }, [])
 
   useEffect(() => {
-    if (!session) { setIsAdmin(null); return }
-    supabase.from('admins').select('user_id').eq('user_id', session.user.id).maybeSingle()
-      .then(({ data, error }) => setIsAdmin(!error && !!data))
+    if (!session) { setRole(null); return }
+    const id = session.user.id
+    supabase.from('admins').select('user_id, role').eq('user_id', id).maybeSingle().then(async ({ data, error }) => {
+      // Before the latest schema is applied there is no role column yet: treat existing admins as plain admins.
+      if (error && /role/i.test(error.message)) {
+        const r = await supabase.from('admins').select('user_id').eq('user_id', id).maybeSingle()
+        setRole(!r.error && r.data ? 'admin' : 'none')
+        return
+      }
+      setRole(!error && data ? data.role : 'none')
+    })
   }, [session])
 
   if (session === undefined) return <div className="min-h-svh" />
   if (!session) return <Login />
-  if (isAdmin === null) return <div className="grid min-h-svh place-items-center text-snow/60">Checking access...</div>
-  if (!isAdmin) {
+  if (role === null) return <div className="grid min-h-svh place-items-center text-snow/60">Checking access...</div>
+  if (role === 'none') {
     return (
       <div className="grid min-h-svh place-items-center px-4">
         <div className="glass max-w-md rounded-3xl p-8 text-center">
           <h1 className="text-2xl font-bold tracking-[-0.03em]">No admin access</h1>
-          <p className="mt-3 text-snow/65">{session.user.email} is signed in but is not on the admin list. Add it in Supabase, then sign in again.</p>
+          <p className="mt-3 text-snow/65">{session.user.email} is signed in but does not have access to this dashboard yet. Ask the super admin to give you access, then sign in again.</p>
           <button onClick={() => supabase.auth.signOut()} className={`${btnWhite} mt-6`}>Sign out</button>
         </div>
       </div>
     )
   }
-  return <Dashboard session={session} />
+  return <Dashboard session={session} role={role} />
 }

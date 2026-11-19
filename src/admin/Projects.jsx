@@ -285,7 +285,7 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
   const [counts, setCounts] = useState({})
   const [error, setError] = useState('')
   const [view, setView] = useState(() => localStorage.getItem('dl_task_view') || 'board')
-  const [who, setWho] = useState('all')
+  const [who, setWho] = useState(me.id) // default: only tasks assigned to you
   const [newTask, setNewTask] = useState(null)
   const [openTask, setOpenTask] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -361,16 +361,21 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
 
       <div className="mb-5 mt-10 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{shown.length}</span></h2>
+          <h2 className="text-2xl font-bold tracking-[-0.03em]">Tasks <span className="text-snow/45">{shown.length}{shown.length !== tasks.length ? ` of ${tasks.length}` : ''}</span></h2>
           <p className="mt-1 text-sm text-snow/55">{view === 'board' ? 'Drag a card to change its status. Click a card for details, checklist and comments.' : 'Tick a task to mark it done. Click a title for details.'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Filter by assignee" className="glass rounded-full bg-transparent px-4 py-2 text-sm font-semibold outline-none">
-            <option value="all" className="bg-ink">Everyone</option>
-            <option value={me.id} className="bg-ink">Assigned to me</option>
-            <option value="none" className="bg-ink">Unassigned</option>
-            {team.filter((m) => m.user_id !== me.id).map((m) => <option key={m.user_id} value={m.user_id} className="bg-ink">{m.full_name || m.email}</option>)}
-          </select>
+          <div className="glass flex rounded-full p-1 text-sm font-semibold" role="group" aria-label="Filter tasks by assignee">
+            {[[me.id, 'Assigned to me', tasks.filter((t) => t.assignee_id === me.id).length], ['all', 'Everyone', tasks.length], ['none', 'Unassigned', tasks.filter((t) => !t.assignee_id).length]].map(([v, l, n]) => (
+              <button key={v} onClick={() => setWho(v)} aria-pressed={who === v} className={`flex items-center gap-2 rounded-full px-4 py-1.5 ${who === v ? 'bg-snow text-ink' : 'text-snow/65 hover:text-snow'}`}>{l}<span className={`text-xs ${who === v ? 'text-ink/55' : 'text-snow/40'}`}>{n}</span></button>
+            ))}
+          </div>
+          {team.some((m) => m.user_id !== me.id) && (
+            <select value={team.some((m) => m.user_id === who && m.user_id !== me.id) ? who : ''} onChange={(e) => e.target.value && setWho(e.target.value)} aria-label="Show a teammate's tasks" className="glass rounded-full bg-transparent px-4 py-2 text-sm font-semibold outline-none">
+              <option value="" className="bg-ink">A teammate...</option>
+              {team.filter((m) => m.user_id !== me.id).map((m) => <option key={m.user_id} value={m.user_id} className="bg-ink">{m.full_name || m.email}</option>)}
+            </select>
+          )}
           <div className="glass flex rounded-full p-1 text-sm font-semibold">
             {['list', 'board'].map((v) => <button key={v} onClick={() => setViewPersist(v)} className={`rounded-full px-4 py-1.5 capitalize ${view === v ? 'bg-snow text-ink' : 'text-snow/65'}`}>{v}</button>)}
           </div>
@@ -378,6 +383,12 @@ export function ProjectDetail({ id, navigate, me, isSuper }) {
         </div>
       </div>
 
+      {!shown.length && tasks.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
+          <p className="text-sm text-snow/70">{who === me.id ? 'No tasks in this project are assigned to you.' : 'No tasks match this filter.'}</p>
+          <button onClick={() => setWho('all')} className="pill-white rounded-full px-4 py-2 text-sm font-semibold">Show everyone's tasks</button>
+        </div>
+      )}
       {view === 'board'
         ? <Board tasks={shown} whoOf={find} counts={counts} onMove={move} onOpen={setOpenTask} onAdd={(status) => setNewTask({ project_id: id, status })} />
         : <TaskList tasks={shown} whoOf={find} counts={counts} onMove={move} onOpen={setOpenTask} />}
@@ -401,6 +412,7 @@ export function Projects({ navigate, openNew, me, isSuper }) {
   const [cat, setCat] = useState('All')
   const [modal, setModal] = useState(openNew === 'project' ? 'project' : openNew === 'task' ? 'task' : null)
   const [openTask, setOpenTask] = useState(null)
+  const [quickAll, setQuickAll] = useState(false)
   const cats = useCategories()
   const { team } = useTeam()
 
@@ -416,7 +428,8 @@ export function Projects({ navigate, openNew, me, isSuper }) {
 
   const catNames = useMemo(() => ['All', ...new Set((projects || []).map((p) => p.category).filter(Boolean))], [projects])
   const shown = (projects || []).filter((p) => cat === 'All' || p.category === cat)
-  const quick = tasks.filter((t) => !t.project_id)
+  const allQuick = tasks.filter((t) => !t.project_id)
+  const quick = quickAll ? allQuick : allQuick.filter((t) => t.assignee_id === me.id)
   const openCount = tasks.filter((t) => t.status !== 'done').length
 
   async function toggleQuick(t) {
@@ -430,7 +443,7 @@ export function Projects({ navigate, openNew, me, isSuper }) {
     const form = e.currentTarget
     const title = new FormData(form).get('title').toString().trim()
     if (!title) return
-    const { data, error } = await supabase.from('tasks').insert({ title }).select().single()
+    const { data, error } = await supabase.from('tasks').insert({ title, assignee_id: me.id, assignee_email: me.email }).select().single()
     if (error) setError(error.message); else { setTasks((ts) => [...ts, data]); form.reset() }
   }
 
@@ -478,7 +491,12 @@ export function Projects({ navigate, openNew, me, isSuper }) {
 
         <aside className={`${card} p-6`}>
           <h2 className="text-xl font-bold tracking-[-0.03em]">Quick tasks <span className="text-snow/45">{quick.length}</span></h2>
-          <p className="mt-1 text-sm text-snow/55">Tasks without a project</p>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-sm text-snow/55">Tasks without a project</p>
+            <div className="glass flex rounded-full p-0.5 text-xs font-semibold">
+              {[[false, 'Mine'], [true, 'All']].map(([v, l]) => <button key={l} onClick={() => setQuickAll(v)} aria-pressed={quickAll === v} className={`rounded-full px-3 py-1 ${quickAll === v ? 'bg-snow text-ink' : 'text-snow/65'}`}>{l}</button>)}
+            </div>
+          </div>
           <ul className="mt-5 grid gap-1">
             {quick.map((t) => (
               <li key={t.id} className="flex items-center gap-3 rounded-lg py-1.5">

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import {
   field, label, btnWhite, btnGhost, card, STATUSES, statusLabel, statusDot, PRIORITY, CATEGORIES,
@@ -117,11 +118,23 @@ function TaskModal({ task, defaults = {}, projects, onClose, onSaved, onDeleted 
 }
 
 /* ---------------- Task card + board ---------------- */
-function TaskCard({ t, onOpen, draggable }) {
+// Cards are physical: they lift and tilt while dragged, spring into the column they are dropped on,
+// and neighbouring cards slide to fill the gap. Pointer-based, so it also works with touch.
+function TaskCard({ t, onOpen, onDrag, onDrop }) {
+  const moved = useRef(false)
   return (
-    <div draggable={draggable} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move' }}
-      onClick={() => onOpen(t)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen(t)}
-      className="glass cursor-grab rounded-2xl p-4 transition-colors hover:border-white/30 active:cursor-grabbing">
+    <motion.div
+      layout layoutId={t.id} drag dragSnapToOrigin dragMomentum={false} dragElastic={0.12}
+      initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ y: -2 }}
+      whileDrag={{ scale: 1.05, rotate: 2, zIndex: 60, boxShadow: '0 28px 50px -14px rgba(0,0,0,.75)' }}
+      transition={{ type: 'spring', stiffness: 520, damping: 38 }}
+      onDragStart={() => { moved.current = true }}
+      onDrag={(_, info) => onDrag(info.point)}
+      onDragEnd={(_, info) => { onDrop(t, info.point); setTimeout(() => { moved.current = false }, 80) }}
+      onClick={() => { if (!moved.current) onOpen(t) }}
+      role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen(t)}
+      className="glass relative cursor-grab select-none rounded-2xl p-4 hover:border-white/30 active:cursor-grabbing">
       <p className="font-semibold leading-snug">{t.title}</p>
       {t.description && <p className="mt-1.5 line-clamp-2 text-sm text-snow/55">{t.description}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -130,28 +143,36 @@ function TaskCard({ t, onOpen, draggable }) {
         {t.tags?.map((g) => <span key={g} className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-snow/65">{g}</span>)}
       </div>
       {t.created_by_email && <p className="mt-3 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
-    </div>
+    </motion.div>
   )
 }
 
 function Board({ tasks, onMove, onOpen, onAdd }) {
   const [over, setOver] = useState(null)
+  const colAt = (pt) => {
+    const hit = document.elementsFromPoint(pt.x - window.scrollX, pt.y - window.scrollY).find((el) => el.dataset?.col)
+    return hit ? hit.dataset.col : null
+  }
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {STATUSES.map(([key, name, dot]) => {
         const col = tasks.filter((t) => t.status === key)
         return (
-          <div key={key} onDragOver={(e) => { e.preventDefault(); setOver(key) }} onDragLeave={() => setOver((o) => (o === key ? null : o))}
-            onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData('text/plain'); if (id) onMove(id, key) }}
-            className={`${card} min-h-[220px] p-4 transition-colors ${over === key ? 'border-pink/60 bg-pink/[0.06]' : ''}`}>
+          <motion.div layout key={key} data-col={key}
+            animate={{ scale: over === key ? 1.015 : 1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className={`${card} min-h-[240px] p-4 transition-colors ${over === key ? 'border-pink/60 bg-pink/[0.07]' : ''}`}>
             <div className="mb-4 flex items-center gap-2 px-1 text-sm font-semibold">
               <span className={`h-2 w-2 rounded-full ${dot}`} />{name}<span className="font-normal text-snow/45">{col.length}</span>
             </div>
             <div className="grid gap-3">
-              {col.map((t) => <TaskCard key={t.id} t={t} onOpen={onOpen} draggable />)}
+              {col.map((t) => (
+                <TaskCard key={t.id} t={t} onOpen={onOpen}
+                  onDrag={(pt) => setOver(colAt(pt))}
+                  onDrop={(task, pt) => { setOver(null); const c = colAt(pt); if (c && c !== task.status) onMove(task.id, c) }} />
+              ))}
               <button onClick={() => onAdd(key)} className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm text-snow/55 hover:bg-white/5 hover:text-snow"><Icon name="plus" className="h-4 w-4" />Add</button>
             </div>
-          </div>
+          </motion.div>
         )
       })}
     </div>

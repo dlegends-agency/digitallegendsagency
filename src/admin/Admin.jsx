@@ -7,6 +7,8 @@ import { Projects, ProjectDetail } from './Projects'
 import Enquiries from './Enquiries'
 import Analytics from './Analytics'
 import Content from './Content'
+import Log from './Log'
+import Account from './Account'
 
 function useNoIndex() {
   useEffect(() => {
@@ -62,6 +64,7 @@ function Login() {
 const nav = [
   { to: 'today', label: 'Today', icon: 'sun' },
   { to: 'projects', label: 'Projects', icon: 'folder' },
+  { to: 'log', label: 'Log', icon: 'clock' },
 ]
 const siteNav = [
   { to: 'enquiries', label: 'Enquiries', icon: 'inbox' },
@@ -106,6 +109,8 @@ function Dashboard({ session }) {
   else if (route === 'enquiries') page = <Enquiries onChanged={refreshBadge} />
   else if (route === 'analytics') page = <Analytics />
   else if (route === 'content') page = <Content />
+  else if (route === 'log') page = <Log />
+  else if (route === 'account') page = <Account user={session.user} />
   else page = <Today user={session.user} navigate={navigate} />
 
   return (
@@ -136,9 +141,15 @@ function Dashboard({ session }) {
 
         <div className="mt-auto flex min-w-0 flex-col gap-3 pt-6">
           <a href="/" target="_blank" rel="noreferrer" className="flex items-center gap-3 px-3 text-sm text-snow/60 hover:text-snow"><Icon name="external" className="h-4 w-4" />View site</a>
-          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 p-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky to-pink text-sm font-bold">{session.user.email[0].toUpperCase()}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-snow/65" title={session.user.email}>{session.user.email}</span>
+          <div className={`flex min-w-0 items-center gap-2 rounded-xl border p-3 ${route === 'account' ? 'border-white/30 bg-white/5' : 'border-white/10'}`}>
+            <button onClick={() => go('account')} title="Account settings" className="flex min-w-0 flex-1 items-center gap-3 text-left">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky to-pink text-sm font-bold">{(session.user.user_metadata?.full_name || session.user.email)[0].toUpperCase()}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{session.user.user_metadata?.full_name || session.user.email.split('@')[0]}</span>
+                <span className="block truncate text-xs text-snow/55" title={session.user.email}>{session.user.email}</span>
+              </span>
+            </button>
+            <button onClick={() => go('account')} aria-label="Account settings" title="Account settings" className="text-snow/55 hover:text-snow"><Icon name="settings" className="h-5 w-5" /></button>
             <button onClick={() => supabase.auth.signOut()} aria-label="Sign out" title="Sign out" className="text-snow/55 hover:text-snow"><Icon name="logout" className="h-5 w-5" /></button>
           </div>
         </div>

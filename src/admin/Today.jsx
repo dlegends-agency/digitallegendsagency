@@ -44,7 +44,7 @@ export default function Today({ user, navigate }) {
     if (error) setError(error.message)
   }
 
-  const raw = user.user_metadata?.name || user.email.split('@')[0]
+  const raw = user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0]
   const name = raw.charAt(0).toUpperCase() + raw.slice(1)
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const maxDay = m ? Math.max(1, ...m.perDay.map(([, n]) => n)) : 1

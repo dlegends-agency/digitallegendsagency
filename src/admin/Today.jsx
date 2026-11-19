@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import QuickLog from './QuickLog'
 import { card, fmtDate, fmtDateTime, isOverdue, dayKey, statusLabel, statusDot, Bar, ErrorNote, Icon } from './ui'
 
 const lbl = 'text-xs font-semibold uppercase tracking-[0.16em] text-snow/45'
@@ -61,6 +62,8 @@ export default function Today({ user, navigate }) {
         </div>
       </section>
       <ErrorNote error={error} />
+
+      <QuickLog />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[

@@ -76,6 +76,21 @@ insert into public.categories (name, color) values
   ('Website', 'sky'), ('Client', 'violet'), ('Marketing', 'pink'), ('Internal', 'amber'), ('Product', 'emerald')
 on conflict (name) do nothing;
 
+-- Time log: each person logs their own time. Feeds the Insights page. Only you can see your entries.
+create table if not exists public.time_entries (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  user_id     uuid default auth.uid(),
+  user_email  text default (auth.jwt() ->> 'email'),
+  entry_date  date not null default current_date,
+  minutes     int not null check (minutes between 1 and 1440),
+  category    text not null check (char_length(category) between 1 and 60),
+  note        text check (char_length(note) <= 500)
+);
+alter table public.time_entries add column if not exists user_id uuid default auth.uid();
+alter table public.time_entries add column if not exists user_email text default (auth.jwt() ->> 'email');
+create index if not exists time_entries_user_idx on public.time_entries (user_id, entry_date desc);
+
 -- Blog posts. Written in Markdown. Visitors can read published posts only.
 create table if not exists public.blog_posts (
   id              uuid primary key default gen_random_uuid(),
@@ -185,6 +200,7 @@ grant select, insert, delete         on public.task_comments    to authenticated
 grant select (id, created_at, updated_at, published_at, status, title, slug, excerpt, content, cover_image, category, tags, seo_description, author_name)
   on public.blog_posts to anon;
 grant select, insert, update, delete on public.blog_posts       to authenticated;
+grant select, insert, update, delete on public.time_entries     to authenticated;
 
 -- ============================================================
 -- Row-level security
@@ -200,6 +216,7 @@ alter table public.categories       enable row level security;
 alter table public.task_checklist_items enable row level security;
 alter table public.task_comments    enable row level security;
 alter table public.blog_posts       enable row level security;
+alter table public.time_entries     enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -310,6 +327,15 @@ create policy "admins add comments" on public.task_comments
 drop policy if exists "delete own comments" on public.task_comments;
 create policy "delete own comments" on public.task_comments
   for delete to authenticated using (public.is_admin() and (author_id = auth.uid() or public.is_super_admin()));
+
+-- time log: you can see and change only your own entries.
+drop policy if exists "super admin manages time" on public.time_entries;
+drop policy if exists "admins manage time" on public.time_entries;
+drop policy if exists "own time entries" on public.time_entries;
+create policy "own time entries" on public.time_entries
+  for all to authenticated
+  using (public.is_admin() and user_id = auth.uid())
+  with check (public.is_admin() and user_id = auth.uid());
 
 -- blog: the public reads published posts; any admin reads everything and manages posts.
 drop policy if exists "public read published posts" on public.blog_posts;

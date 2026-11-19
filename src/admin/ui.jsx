@@ -39,6 +39,7 @@ const paths = {
   pencil: <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />,
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  insights: <path d="M5 20V10M12 20V4M19 20v-7" />,
   pen: <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1zM14 7l3 3" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   comment: <path d="M4 5h16v11H9l-5 4V5z" />,

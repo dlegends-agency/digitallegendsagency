@@ -52,7 +52,7 @@ export default function Today({ user, navigate }) {
   return (
     <div className="grid gap-4">
       <section className={`${card} flex items-center gap-4 p-5 md:p-6`}>
-        <img src="/img/logo.webp" alt="" className="hidden h-9 w-auto sm:block" />
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-white/15 bg-white/[0.05] text-snow/80"><Icon name="sun" className="h-5 w-5" /></span>
         <div>
           <p className={lbl}>{today}</p>
           <p className="mt-1 text-lg md:text-xl">

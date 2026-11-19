@@ -36,3 +36,15 @@ export const socials = [
   ['LinkedIn', 'https://www.linkedin.com/in/team-voila-95307b379/'],
   ['Instagram', 'https://www.instagram.com/dlegends.agency/'],
 ]
+
+export const hero = {
+  line1: 'Apps for niche markets.',
+  line2: 'Built with AI.',
+  text: 'Digital Legends is a mobile app agency. We study a specialized audience, then design and build the product around it, from first idea to launch.',
+}
+
+// Only well-formed database content is accepted; anything else falls back to the defaults.
+export const validators = {
+  hero: (v) => !!v && typeof v === 'object' && ['line1', 'line2', 'text'].every((k) => typeof v[k] === 'string' && v[k].trim()),
+  list: (v) => Array.isArray(v) && v.length > 0 && v.every((r) => Array.isArray(r) && r.length === 2 && r.every((x) => typeof x === 'string' && x.trim())),
+}

@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import Shader from './components/Shader'
 import { Reveal, Words, Para, ScrollText, Parallax, Marquee, ease } from './components/motion'
-import { nav, services, steps, principles, socials } from './content'
+import { nav, socials } from './content'
+import { supabase } from './lib/supabase'
+import { useSiteContent } from './lib/useSiteContent'
 
 const wrap = 'mx-auto w-full max-w-[1440px] px-6 md:px-10'
 function Badge({ children }) {
@@ -46,7 +48,7 @@ function Nav() {
 }
 
 /* ---------------- Hero ---------------- */
-function Hero() {
+function Hero({ hero }) {
   return (
     <section id="top" className="relative overflow-hidden pb-28 pt-36 md:pb-40 md:pt-44">
       <Shader className="absolute inset-x-0 top-0 h-full opacity-90" />
@@ -54,12 +56,12 @@ function Hero() {
       <div className={`${wrap} relative text-center`}>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}><Badge>Mobile app agency</Badge></motion.div>
         <h1 className="h-display mx-auto mt-8 max-w-5xl text-[clamp(2.7rem,7vw,6rem)]">
-          <Words text="Apps for niche markets." when delay={0.15} />
-          <span className="block text-snow/75"><Words text="Built with AI." when delay={0.55} /></span>
+          <Words key={hero.line1} text={hero.line1} when delay={0.15} />
+          <span className="block text-snow/75"><Words key={hero.line2} text={hero.line2} when delay={0.55} /></span>
         </h1>
         <motion.p initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.2 }}
           className="mx-auto mt-7 max-w-2xl text-[17px] leading-relaxed text-snow/75 md:text-lg">
-          Digital Legends is a mobile app agency. We study a specialized audience, then design and build the product around it, from first idea to launch.
+          {hero.text}
         </motion.p>
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease, delay: 0.3 }}
           className="mt-10 flex flex-wrap items-center justify-center gap-3">
@@ -111,7 +113,7 @@ const icons = [
   <><path d="M12 2.5l8.5 4.9v9.2L12 21.5l-8.5-4.9V7.4z" /><path d="M12 12l8.5-4.6M12 12L3.5 7.4M12 12v9.5" /></>,
 ]
 const serviceImgs = ['/img/svc-mobile.jpg', '/img/svc-web.jpg', '/img/svc-ai.jpg', '/img/svc-seo.jpg', '/img/svc-content.jpg', '/img/svc-web3.jpg']
-function Services() {
+function Services({ services }) {
   return (
     <section id="services" className="py-20 md:py-28">
       <div className={wrap}>
@@ -125,11 +127,11 @@ function Services() {
             <Reveal key={t} delay={(i % 3) * 0.07}>
               <article className="glass group h-full overflow-hidden rounded-3xl transition-colors duration-300 hover:border-white/25 hover:bg-white/[0.06]">
                 <div className="aspect-[4/3] overflow-hidden">
-                  <img src={serviceImgs[i]} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
+                  <img src={serviceImgs[i % serviceImgs.length]} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
                 </div>
                 <div className="p-7 md:p-8">
                   <span className="grid h-11 w-11 place-items-center rounded-2xl border border-white/15 bg-white/[0.04]">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-snow" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{icons[i]}</svg>
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-snow" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{icons[i % icons.length]}</svg>
                   </span>
                   <h3 className="mt-6 text-[22px] font-semibold leading-snug tracking-[-0.03em]">{t}</h3>
                   <p className="mt-3 leading-relaxed text-snow/65">{d}</p>
@@ -144,7 +146,7 @@ function Services() {
 }
 
 /* ---------------- Process ---------------- */
-function Process() {
+function Process({ steps }) {
   return (
     <section id="approach" className="py-20 md:py-28">
       <div className={wrap}>
@@ -168,7 +170,7 @@ function Process() {
 }
 
 /* ---------------- Principles ---------------- */
-function Principles() {
+function Principles({ principles }) {
   return (
     <section id="principles" className="py-20 md:py-28">
       <div className={`${wrap} grid gap-12 lg:grid-cols-[1fr_1.5fr] lg:gap-20`}>
@@ -192,7 +194,21 @@ function Principles() {
 
 /* ---------------- Contact ---------------- */
 function Contact() {
-  const [sent, setSent] = useState(false)
+  const [status, setStatus] = useState('idle')
+  async function submit(e) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const f = new FormData(form)
+    if (f.get('website')) { setStatus('sent'); return }
+    setStatus('sending')
+    const { error } = await supabase.from('leads').insert({
+      name: String(f.get('name')).trim(),
+      email: String(f.get('email')).trim(),
+      message: String(f.get('message') || '').trim() || null,
+    })
+    if (error) setStatus('error')
+    else { setStatus('sent'); form.reset() }
+  }
   const input = 'w-full rounded-2xl border border-white/12 bg-white/[0.04] px-5 py-4 text-snow placeholder:text-snow/35 outline-none transition-colors focus:border-white/40'
   return (
     <section id="contact" className="py-20 md:py-28">
@@ -207,13 +223,15 @@ function Contact() {
               <Para className="mt-6 max-w-md text-[17px] leading-relaxed text-snow/70">Tell us about your project and who it is for.</Para>
             </Reveal>
             <Reveal delay={0.08}>
-              <form onSubmit={(e) => { e.preventDefault(); setSent(true) }} className="grid gap-4">
-                <input required className={input} placeholder="Your name" aria-label="Your name" autoComplete="name" />
-                <input required type="email" className={input} placeholder="Email address" aria-label="Email address" autoComplete="email" />
-                <textarea rows={4} className={`${input} resize-none`} placeholder="Tell us about your project" aria-label="Project details" />
-                <button className="pill-white mt-2 justify-self-start rounded-full px-8 py-4 text-[15px] font-semibold transition-transform hover:-translate-y-0.5">
-                  {sent ? 'Thanks. We will be in touch.' : 'Send message'}
+              <form onSubmit={submit} className="grid gap-4">
+                <input name="name" required maxLength={200} className={input} placeholder="Your name" aria-label="Your name" autoComplete="name" />
+                <input name="email" required type="email" maxLength={320} className={input} placeholder="Email address" aria-label="Email address" autoComplete="email" />
+                <textarea name="message" rows={4} maxLength={5000} className={`${input} resize-none`} placeholder="Tell us about your project" aria-label="Project details" />
+                <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+                <button disabled={status === 'sending' || status === 'sent'} className="pill-white mt-2 justify-self-start rounded-full px-8 py-4 text-[15px] font-semibold transition-transform hover:-translate-y-0.5 disabled:opacity-80">
+                  {status === 'sent' ? 'Thanks. We will be in touch.' : status === 'sending' ? 'Sending...' : 'Send message'}
                 </button>
+                {status === 'error' && <p role="alert" className="text-sm text-pink">Something went wrong. Please try again.</p>}
               </form>
             </Reveal>
           </div>
@@ -247,19 +265,20 @@ function Footer() {
 }
 
 export default function App() {
+  const c = useSiteContent()
   return (
     <>
       <Nav />
       <main>
-        <Hero />
+        <Hero hero={c.hero} />
         <div className="border-y border-white/10 py-6 md:py-8">
           <Marquee words={['Mobile apps', 'AI solutions', 'Web apps', 'SEO', 'Content', 'Web3']} className="h-display text-[clamp(2.4rem,6vw,5rem)] font-semibold text-snow" />
         </div>
         <Statement />
         <StudioImage />
-        <Services />
-        <Process />
-        <Principles />
+        <Services services={c.services} />
+        <Process steps={c.steps} />
+        <Principles principles={c.principles} />
         <Contact />
       </main>
       <Footer />

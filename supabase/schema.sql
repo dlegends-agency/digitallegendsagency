@@ -77,18 +77,6 @@ create table if not exists public.analytics_events (
 );
 create index if not exists analytics_created_idx on public.analytics_events (created_at desc);
 
--- Time log: who spent how long on what.
-create table if not exists public.time_entries (
-  id               uuid primary key default gen_random_uuid(),
-  created_at       timestamptz not null default now(),
-  entry_date       date not null default current_date,
-  minutes          int not null check (minutes between 1 and 1440),
-  category         text not null check (char_length(category) between 1 and 60),
-  note             text check (char_length(note) <= 500),
-  created_by_email text default (auth.jwt() ->> 'email')
-);
-create index if not exists time_entries_date_idx on public.time_entries (entry_date desc);
-
 -- Activity log: filled automatically by triggers below. Nobody writes to it directly.
 create table if not exists public.activity_log (
   id          uuid primary key default gen_random_uuid(),
@@ -114,7 +102,6 @@ grant select, insert, update, delete on public.projects         to authenticated
 grant select, insert, update, delete on public.tasks            to authenticated;
 grant insert                         on public.analytics_events to anon, authenticated;
 grant select, delete                 on public.analytics_events to authenticated;
-grant select, insert, update, delete on public.time_entries     to authenticated;
 grant select                         on public.activity_log     to authenticated;
 
 -- ============================================================
@@ -126,7 +113,6 @@ alter table public.admins           enable row level security;
 alter table public.projects         enable row level security;
 alter table public.tasks            enable row level security;
 alter table public.analytics_events enable row level security;
-alter table public.time_entries     enable row level security;
 alter table public.activity_log     enable row level security;
 
 create or replace function public.is_admin()
@@ -210,12 +196,6 @@ create policy "admins read events" on public.analytics_events
 drop policy if exists "admins delete events" on public.analytics_events;
 create policy "admins delete events" on public.analytics_events
   for delete to authenticated using (public.is_admin());
-
--- time log: super admin only.
-drop policy if exists "admins manage time" on public.time_entries;
-drop policy if exists "super admin manages time" on public.time_entries;
-create policy "super admin manages time" on public.time_entries
-  for all to authenticated using (public.is_super_admin()) with check (public.is_super_admin());
 
 -- activity log: super admin can read. Rows are written only by the trigger function below.
 drop policy if exists "admins read activity" on public.activity_log;

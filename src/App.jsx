@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Shader from './components/Shader'
 import { Reveal, Words, Para, ScrollText, Parallax, Marquee, ease } from './components/motion'
 import { nav, socials } from './content'
 import { supabase } from './lib/supabase'
 import { useSiteContent } from './lib/useSiteContent'
+import { startTracking, track } from './lib/track'
 
 const wrap = 'mx-auto w-full max-w-[1440px] px-6 md:px-10'
 function Badge({ children }) {
@@ -207,7 +208,7 @@ function Contact() {
       message: String(f.get('message') || '').trim() || null,
     })
     if (error) setStatus('error')
-    else { setStatus('sent'); form.reset() }
+    else { setStatus('sent'); form.reset(); track('form_submit', 'contact') }
   }
   const input = 'w-full rounded-2xl border border-white/12 bg-white/[0.04] px-5 py-4 text-snow placeholder:text-snow/35 outline-none transition-colors focus:border-white/40'
   return (
@@ -266,6 +267,7 @@ function Footer() {
 
 export default function App() {
   const c = useSiteContent()
+  useEffect(() => startTracking(), [])
   return (
     <>
       <Nav />

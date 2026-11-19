@@ -134,7 +134,7 @@ function Dashboard({ session, role }) {
   else if (route === 'blog') page = <Blog seg={seg} navigate={navigate} me={session.user} key={seg[1] || 'list'} />
   else if (route === 'log') page = <Log />
   else if (route === 'account') page = <Account user={session.user} />
-  else page = <Today user={session.user} navigate={navigate} />
+  else page = <Today user={session.user} navigate={navigate} isSuper={isSuper} />
 
   return (
     <div className="min-h-svh lg:pl-64">

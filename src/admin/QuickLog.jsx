@@ -8,7 +8,7 @@ const lbl = 'text-xs font-semibold uppercase tracking-[0.16em] text-snow/45'
 const QUICK = [[15, '15M'], [30, '30M'], [60, '1H'], [120, '2H']]
 
 /* "Logged today" panel: pick a category, tap a duration. Shown at the top of Today. */
-export default function QuickLog() {
+export default function QuickLog({ compact = false }) {
   const cats = useCategories()
   const [entries, setEntries] = useState(null)
   const [error, setError] = useState('')
@@ -52,14 +52,14 @@ export default function QuickLog() {
   }
 
   return (
-    <section className={`${card} p-6 md:p-8`}>
-      <div className="grid gap-8 lg:grid-cols-[1.3fr_1fr]">
+    <section className={`${card} ${compact ? 'h-full p-6' : 'p-6 md:p-8'}`}>
+      <div className={`grid gap-8 ${compact ? '' : 'lg:grid-cols-[1.3fr_1fr]'}`}>
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <p className={lbl}>Logged today</p>
             {m.streak > 1 && <span className="flex items-center gap-1.5 rounded-full border border-sky/40 bg-sky/10 px-3 py-1 text-xs font-semibold text-sky"><Icon name="check" className="h-3.5 w-3.5" />{m.streak}-day streak</span>}
           </div>
-          <p className="mt-2 text-6xl font-bold tracking-[-0.05em]">{entries ? fmtMin(m.total) : '–'}</p>
+          <p className={`mt-2 font-bold tracking-[-0.05em] ${compact ? 'text-5xl' : 'text-6xl'}`}>{entries ? fmtMin(m.total) : '–'}</p>
           <div className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-white/10">
             {m.per.map(([c, v]) => <div key={c} className={colorOf(c)} style={{ width: `${(v / m.total) * 100}%` }} title={`${c} ${fmtMin(v)}`} />)}
           </div>

@@ -225,9 +225,12 @@ function TaskCard({ t, who, counts, onOpen, onDrag, onDrop, onMove }) {
       <div className="mt-3 flex items-center gap-3 text-xs text-snow/50">
         {counts?.total > 0 && <span className={`flex items-center gap-1 ${counts.done === counts.total ? 'text-emerald-300' : ''}`}><Icon name="check" className="h-3.5 w-3.5" />{counts.done}/{counts.total}</span>}
         {counts?.comments > 0 && <span className="flex items-center gap-1"><Icon name="comment" className="h-3.5 w-3.5" />{counts.comments}</span>}
-        <span className="ml-auto flex items-center gap-2"><TimerButton task={t} /><Avatar person={who} /></span>
+        <span className="ml-auto"><TimerButton task={t} /></span>
       </div>
-      {t.created_by_email && <p className="mt-2 truncate text-xs text-snow/40" title={t.created_by_email}>Created by {t.created_by_email}</p>}
+      <div className="mt-3 flex min-w-0 items-center gap-2 border-t border-white/10 pt-3 text-xs">
+        <Avatar person={who} />
+        <span className="min-w-0 truncate text-snow/50">Assigned to <span className={who ? 'font-semibold text-snow/85' : 'text-snow/45'}>{who ? (who.full_name || who.email) : 'nobody yet'}</span></span>
+      </div>
       {coarse && (
         <select value={t.status} onClick={(e) => e.stopPropagation()} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Move to" className="mt-3 w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-sm">
           {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
@@ -284,7 +287,7 @@ function TaskList({ tasks, whoOf, counts, onMove, onOpen }) {
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${PRIORITY[t.priority]}`}>{t.priority}</span>
             {t.due_date && <span className={`text-xs ${isOverdue(t) ? 'text-pink' : 'text-snow/55'}`}>Due {fmtDate(t.due_date)}</span>}
             <TimerButton task={t} />
-            <Avatar person={whoOf(t)} />
+            <span className="flex min-w-0 items-center gap-2 text-xs text-snow/60"><Avatar person={whoOf(t)} /><span className="max-w-32 truncate">{whoOf(t) ? (whoOf(t).full_name || whoOf(t).email) : 'Unassigned'}</span></span>
             <select value={t.status} onChange={(e) => onMove(t.id, e.target.value)} aria-label="Status" className="rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-sm">
               {STATUSES.map(([k, l]) => <option key={k} value={k} className="bg-ink">{l}</option>)}
             </select>

@@ -59,6 +59,7 @@ export function Footer() {
         </div>
         <ul className="space-y-3 text-snow/70">
           <li><a className="transition-colors hover:text-snow" href="/blog">Blog</a></li>
+          <li><a className="transition-colors hover:text-snow" href="/resources">Resources</a></li>
           {links.map(([l, p]) => <li key={l}><a className="transition-colors hover:text-snow" href={site + p} target="_blank" rel="noreferrer">{l}</a></li>)}
         </ul>
         <ul className="space-y-3 text-snow/70">

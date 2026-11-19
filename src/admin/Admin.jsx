@@ -11,6 +11,7 @@ import Log from './Log'
 import Account from './Account'
 import Users from './Users'
 import Blog from './Blog'
+import Resources from './Resources'
 import Insights from './Insights'
 import { TimerProvider } from './timer'
 
@@ -83,6 +84,7 @@ const nav = [
 const siteNav = [
   { to: 'enquiries', label: 'Enquiries', icon: 'inbox' },
   { to: 'blog', label: 'Blog', icon: 'pen' },
+  { to: 'resources', label: 'Resources', icon: 'book' },
   { to: 'analytics', label: 'Analytics', icon: 'chart' },
   { to: 'content', label: 'Site content', icon: 'doc' },
 ]
@@ -127,6 +129,7 @@ function Dashboard({ session, role }) {
   else if (route === 'enquiries') page = <Enquiries onChanged={refreshBadge} />
   else if (route === 'analytics') page = <Analytics />
   else if (route === 'content') page = <Content />
+  else if (route === 'resources') page = <Resources seg={seg} navigate={navigate} key={seg[1] || 'list'} />
   else if (route === 'insights') page = <Insights me={session.user} />
   else if (route === 'blog') page = <Blog seg={seg} navigate={navigate} me={session.user} key={seg[1] || 'list'} />
   else if (route === 'log') page = <Log />

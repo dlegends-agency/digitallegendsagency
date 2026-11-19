@@ -142,6 +142,30 @@ values ('blog-images', 'blog-images', true, 5242880, array['image/jpeg', 'image/
 on conflict (id) do update
   set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
+-- Resources: a curated list of tools and repositories, with GitHub details. Visitors can read published ones only.
+create table if not exists public.resources (
+  id                uuid primary key default gen_random_uuid(),
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  published_at      timestamptz,
+  status            text not null default 'draft' check (status in ('draft', 'published')),
+  title             text not null check (char_length(title) between 1 and 200),
+  slug              text not null unique check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(slug) <= 120),
+  summary           text check (char_length(summary) <= 200),
+  body              text not null default '' check (char_length(body) <= 100000),
+  tags              text[] not null default '{}',
+  github_url        text check (char_length(github_url) <= 300),
+  github_stars      int,
+  github_language   text check (char_length(github_language) <= 60),
+  github_license    text check (char_length(github_license) <= 60),
+  github_updated_at timestamptz,
+  created_by_email  text default (auth.jwt() ->> 'email')
+);
+create index if not exists resources_published_idx on public.resources (status, published_at desc);
+drop trigger if exists resources_touch on public.resources;
+create trigger resources_touch before update on public.resources
+  for each row execute function public.touch_updated_at();
+
 -- Checklist items and comments on a task.
 create table if not exists public.task_checklist_items (
   id         uuid primary key default gen_random_uuid(),
@@ -214,6 +238,10 @@ grant select (id, created_at, updated_at, published_at, status, title, slug, exc
 grant select, insert, update, delete on public.blog_posts       to authenticated;
 grant select, insert, update, delete on public.time_entries     to authenticated;
 grant select, insert, update, delete on public.timers           to authenticated;
+-- Visitors may read these columns of published resources only (created_by_email stays private).
+grant select (id, created_at, updated_at, published_at, status, title, slug, summary, body, tags, github_url, github_stars, github_language, github_license, github_updated_at)
+  on public.resources to anon;
+grant select, insert, update, delete on public.resources        to authenticated;
 
 -- ============================================================
 -- Row-level security
@@ -231,6 +259,7 @@ alter table public.task_comments    enable row level security;
 alter table public.blog_posts       enable row level security;
 alter table public.time_entries     enable row level security;
 alter table public.timers           enable row level security;
+alter table public.resources        enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -374,6 +403,15 @@ $$;
 revoke all on function public.task_time(uuid[]) from public, anon;
 grant execute on function public.task_time(uuid[]) to authenticated;
 
+-- resources: the public reads published ones; any admin reads everything and manages them.
+drop policy if exists "public read published resources" on public.resources;
+create policy "public read published resources" on public.resources
+  for select to anon, authenticated using (status = 'published' and published_at <= now());
+
+drop policy if exists "admins manage resources" on public.resources;
+create policy "admins manage resources" on public.resources
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
 -- blog: the public reads published posts; any admin reads everything and manages posts.
 drop policy if exists "public read published posts" on public.blog_posts;
 create policy "public read published posts" on public.blog_posts
@@ -472,6 +510,18 @@ begin
       elsif old.note is distinct from new.note then act := 'updated'; msg := 'Edited the note on the enquiry from ' || new.name;
       else return null; end if;
     else act := 'deleted'; msg := 'Deleted enquiry from ' || old.name; end if;
+  elsif ent = 'resource' then
+    if tg_op = 'INSERT' then
+      act := 'created';
+      msg := 'Created resource "' || new.title || '"' || case when new.status = 'published' then ' (published)' else '' end;
+    elsif tg_op = 'UPDATE' then
+      act := 'updated';
+      if old.status is distinct from new.status then
+        msg := case when new.status = 'published' then 'Published resource "' else 'Unpublished resource "' end || new.title || '"';
+      else
+        msg := 'Edited resource "' || new.title || '"';
+      end if;
+    else act := 'deleted'; msg := 'Deleted resource "' || old.title || '"'; end if;
   elsif ent = 'blog' then
     if tg_op = 'INSERT' then
       act := 'created';
@@ -506,6 +556,10 @@ create trigger log_tasks after insert or update or delete on public.tasks
 drop trigger if exists log_comments on public.task_comments;
 create trigger log_comments after insert on public.task_comments
   for each row execute function public.log_activity('comment');
+
+drop trigger if exists log_resources on public.resources;
+create trigger log_resources after insert or update or delete on public.resources
+  for each row execute function public.log_activity('resource');
 
 drop trigger if exists log_blog on public.blog_posts;
 create trigger log_blog after insert or update or delete on public.blog_posts

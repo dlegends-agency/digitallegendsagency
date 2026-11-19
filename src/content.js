@@ -4,6 +4,7 @@ export const nav = [
   ['How we work', '#approach'],
   ['Principles', '#principles'],
   ['Blog', '/blog'],
+  ['Resources', '/resources'],
   ['Contact', '#contact'],
 ]
 

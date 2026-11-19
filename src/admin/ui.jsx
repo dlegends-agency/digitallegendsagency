@@ -42,6 +42,7 @@ const paths = {
   play: <path d="M8 5.5v13l10.5-6.5z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
   insights: <path d="M5 20V10M12 20V4M19 20v-7" />,
+  book: <path d="M5 4h10a3 3 0 013 3v13H8a3 3 0 01-3-3V4zM5 17a3 3 0 013-3h10" />,
   pen: <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1zM14 7l3 3" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   comment: <path d="M4 5h16v11H9l-5 4V5z" />,
